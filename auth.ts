@@ -24,6 +24,12 @@ interface OAuthConfig {
   clientSecret: string;
 }
 
+export interface OAuthSetupStatus {
+  configured: boolean;
+  source: string | null;
+  tokenPath: string;
+}
+
 interface LoopbackServerState {
   server: Server;
   redirectUri: string;
@@ -253,11 +259,52 @@ async function loadOAuthConfig(): Promise<OAuthConfig> {
 
   if (!credentialsPath) {
     throw new Error(
-      "Missing OAuth client configuration. Set YOUTUBE_OAUTH_CLIENT_ID and YOUTUBE_OAUTH_CLIENT_SECRET, set YOUTUBE_OAUTH_CLIENT_JSON_BASE64, or set YOUTUBE_OAUTH_CLIENT_FILE to a Desktop app OAuth client JSON file.",
+      "Missing OAuth client configuration. Run the setup command, or set YOUTUBE_OAUTH_CLIENT_ID and YOUTUBE_OAUTH_CLIENT_SECRET, set YOUTUBE_OAUTH_CLIENT_JSON_BASE64, or set YOUTUBE_OAUTH_CLIENT_FILE to a Desktop app OAuth client JSON file.",
     );
   }
 
-  const raw = await readFile(resolve(credentialsPath), "utf8");
+  return readOAuthClientFile(credentialsPath);
+}
+
+export function inspectOAuthSetup(): OAuthSetupStatus {
+  if (loadOAuthConfigFromEnv()) {
+    return {
+      configured: true,
+      source: "environment variables (client ID + secret)",
+      tokenPath: getTokenPath(),
+    };
+  }
+
+  if (loadOAuthConfigFromJsonEnv()) {
+    return {
+      configured: true,
+      source: "environment variables (OAuth client JSON)",
+      tokenPath: getTokenPath(),
+    };
+  }
+
+  const credentialsPath =
+    process.env.YOUTUBE_OAUTH_CLIENT_FILE ??
+    process.env.GOOGLE_OAUTH_CLIENT_FILE ??
+    null;
+
+  if (credentialsPath) {
+    return {
+      configured: true,
+      source: `OAuth client file (${resolve(credentialsPath)})`,
+      tokenPath: getTokenPath(),
+    };
+  }
+
+  return {
+    configured: false,
+    source: null,
+    tokenPath: getTokenPath(),
+  };
+}
+
+export async function readOAuthClientFile(filePath: string): Promise<OAuthConfig> {
+  const raw = await readFile(resolve(filePath), "utf8");
   return parseInstalledClientJson(raw, "OAuth client file");
 }
 

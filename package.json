@@ -2,8 +2,12 @@
   "name": "yt-playlist-dedupe",
   "type": "module",
   "private": true,
+  "bin": {
+    "yt-playlist-dedupe": "./index.ts"
+  },
   "scripts": {
     "start": "bun run index.ts",
+    "setup": "bun run index.ts setup",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
