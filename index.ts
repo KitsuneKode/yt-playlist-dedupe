@@ -1,21 +1,21 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import { createInterface } from "node:readline";
 import { setTimeout as sleep } from "node:timers/promises";
 import { getAuthenticatedClient } from "./auth.js";
 import {
+  type DuplicatePlaylistItem,
   findDuplicateVideos,
   getProtectedPlaylistName,
-  type DuplicatePlaylistItem,
   isProtectedPlaylistId,
 } from "./dedupe.js";
 import { runSetup } from "./setup.js";
 import {
-  YOUTUBE_SCOPE,
   createYouTubeClient,
   deletePlaylistItemWithRetry,
   formatApiError,
   listPlaylistItems,
+  YOUTUBE_SCOPE,
 } from "./youtube.js";
 
 const INTER_DELETE_DELAY_MS = 200;
@@ -77,7 +77,8 @@ export async function main(): Promise<void> {
   const youtube = createYouTubeClient(authClient);
 
   const playlistItems = await safelyListPlaylistItems(youtube, cli.playlistId);
-  const { duplicates, itemsWithoutVideoId, uniqueVideoCount } = findDuplicateVideos(playlistItems);
+  const { duplicates, itemsWithoutVideoId, uniqueVideoCount } =
+    findDuplicateVideos(playlistItems);
 
   printScanSummary({
     scannedCount: playlistItems.length,
@@ -93,19 +94,25 @@ export async function main(): Promise<void> {
 
   if (!cli.execute) {
     console.log("");
-    console.log("Dry run only. Re-run with --execute to delete the duplicate playlist items listed above.");
+    console.log(
+      "Dry run only. Re-run with --execute to delete the duplicate playlist items listed above.",
+    );
     return;
   }
 
   console.log("");
   if (!cli.yes) {
     console.log("Deletion warning:");
-    console.log("- Only duplicate playlist items from the playlist above will be deleted.");
+    console.log(
+      "- Only duplicate playlist items from the playlist above will be deleted.",
+    );
     console.log("- The first occurrence of each video will be kept.");
     console.log("- This action cannot be undone.");
     console.log("");
 
-    const confirmed = await promptForConfirmation("Proceed to delete? (yes/no) ");
+    const confirmed = await promptForConfirmation(
+      "Proceed to delete? (yes/no) ",
+    );
     if (!confirmed) {
       console.log("Deletion cancelled.");
       return;
@@ -138,7 +145,9 @@ export async function main(): Promise<void> {
   }
 
   console.log("");
-  console.log(`Deleted ${deletedCount} duplicate playlist item${deletedCount === 1 ? "" : "s"}.`);
+  console.log(
+    `Deleted ${deletedCount} duplicate playlist item${deletedCount === 1 ? "" : "s"}.`,
+  );
 }
 
 export function parseArgs(argv: string[]): CliOptions {
@@ -159,7 +168,11 @@ export function parseArgs(argv: string[]): CliOptions {
     }
 
     if (value.startsWith("--")) {
-      if (!ALLOWED_FLAGS.has(value as (typeof ALLOWED_FLAGS extends Set<infer T> ? T : never))) {
+      if (
+        !ALLOWED_FLAGS.has(
+          value as typeof ALLOWED_FLAGS extends Set<infer T> ? T : never,
+        )
+      ) {
         throw new Error(`Unknown flag: ${value}`);
       }
 
@@ -221,7 +234,9 @@ export function parseArgs(argv: string[]): CliOptions {
     }
 
     if (execute || sawDryRun || yes) {
-      throw new Error("The setup command does not accept scan or deletion flags.");
+      throw new Error(
+        "The setup command does not accept scan or deletion flags.",
+      );
     }
 
     return {
@@ -247,7 +262,9 @@ export function parseArgs(argv: string[]): CliOptions {
     };
   }
 
-  const normalizedPlaylist = playlistInput ? normalizePlaylistInput(playlistInput) : null;
+  const normalizedPlaylist = playlistInput
+    ? normalizePlaylistInput(playlistInput)
+    : null;
 
   return {
     command,
@@ -272,29 +289,39 @@ async function safelyListPlaylistItems(
 }
 
 function printUsage(): void {
-  console.log("yt-playlist-dedupe");
+  console.log("yt-ddp");
   console.log("");
   console.log("Usage:");
-  console.log("  bun run setup");
-  console.log("  bun run index.ts <playlist-id-or-url> [--execute] [--yes]");
-  console.log("  bun run index.ts scan --playlist <playlist-id-or-url> [--execute] [--yes]");
+  console.log("  yt-ddp setup");
+  console.log("  yt-ddp <playlist-id-or-url> [--execute] [--yes]");
+  console.log(
+    "  yt-ddp scan --playlist <playlist-id-or-url> [--execute] [--yes]",
+  );
   console.log("");
   console.log("Commands:");
   console.log("  setup       Save Google Desktop OAuth credentials into .env");
-  console.log("  scan        Explicit scan command. This is also the default action.");
+  console.log(
+    "  scan        Explicit scan command. This is also the default action.",
+  );
   console.log("");
   console.log("Flags:");
   console.log("  --playlist  Playlist ID or full YouTube playlist/watch URL");
-  console.log("  --dry-run   Scan only and print duplicates. This is the default.");
+  console.log(
+    "  --dry-run   Scan only and print duplicates. This is the default.",
+  );
   console.log("  --execute   Delete duplicate playlist items.");
-  console.log("  --yes       Skip the delete confirmation prompt. Requires --execute.");
+  console.log(
+    "  --yes       Skip the delete confirmation prompt. Requires --execute.",
+  );
   console.log("  --help, -h  Show this help text.");
   console.log("");
   console.log("Examples:");
-  console.log("  bun run setup");
-  console.log('  bun run index.ts "https://www.youtube.com/playlist?list=PLxxxxxxxx"');
-  console.log("  bun run index.ts --playlist PLxxxxxxxx --execute");
-  console.log('  bun run start -- "https://www.youtube.com/watch?v=abc123&list=PLxxxxxxxx" --execute --yes');
+  console.log("  yt-ddp setup");
+  console.log('  yt-ddp "https://www.youtube.com/playlist?list=PLxxxxxxxx"');
+  console.log("  yt-ddp --playlist PLxxxxxxxx --execute");
+  console.log(
+    '  yt-ddp "https://www.youtube.com/watch?v=abc123&list=PLxxxxxxxx" --execute --yes',
+  );
 }
 
 function printScanSummary({
@@ -316,7 +343,9 @@ function printScanSummary({
   console.log(`Duplicates found: ${duplicateCount}`);
 
   if (itemsWithoutVideoId > 0) {
-    console.log(`Items skipped without a usable videoId: ${itemsWithoutVideoId}`);
+    console.log(
+      `Items skipped without a usable videoId: ${itemsWithoutVideoId}`,
+    );
   }
 
   if (duplicateCount === 0) {
@@ -339,7 +368,7 @@ function printRunHeader(cli: CliOptions): void {
     return;
   }
 
-  console.log("yt-playlist-dedupe");
+  console.log("yt-ddp");
   console.log("");
   console.log(`Mode: ${cli.execute ? "Execute" : "Dry run"}`);
   console.log(`Playlist: ${cli.playlistId}`);
@@ -383,7 +412,9 @@ function extractPlaylistIdFromUrl(input: string): string | null {
       : null;
 
   if (!candidate) {
-    return input.includes("list=") ? extractPlaylistIdFromListParam(input) : null;
+    return input.includes("list=")
+      ? extractPlaylistIdFromListParam(input)
+      : null;
   }
 
   try {
@@ -451,7 +482,9 @@ async function promptForConfirmation(question: string): Promise<boolean> {
 if (import.meta.main) {
   void main().catch((error: unknown) => {
     console.error("");
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `Error: ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exitCode = 1;
   });
 }

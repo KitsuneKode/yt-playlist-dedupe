@@ -7,10 +7,34 @@ import {
 
 test("findDuplicateVideos keeps the first occurrence only", () => {
   const result = findDuplicateVideos([
-    { playlistItemId: "a", title: "One", videoId: "video-1", position: 0, playlistId: "PLabc" },
-    { playlistItemId: "b", title: "Two", videoId: "video-2", position: 1, playlistId: "PLabc" },
-    { playlistItemId: "c", title: "One duplicate", videoId: "video-1", position: 2, playlistId: "PLabc" },
-    { playlistItemId: "d", title: "One duplicate again", videoId: "video-1", position: 3, playlistId: "PLabc" },
+    {
+      playlistItemId: "a",
+      title: "One",
+      videoId: "video-1",
+      position: 0,
+      playlistId: "PLabc",
+    },
+    {
+      playlistItemId: "b",
+      title: "Two",
+      videoId: "video-2",
+      position: 1,
+      playlistId: "PLabc",
+    },
+    {
+      playlistItemId: "c",
+      title: "One duplicate",
+      videoId: "video-1",
+      position: 2,
+      playlistId: "PLabc",
+    },
+    {
+      playlistItemId: "d",
+      title: "One duplicate again",
+      videoId: "video-1",
+      position: 3,
+      playlistId: "PLabc",
+    },
   ]);
 
   expect(result.uniqueVideoCount).toBe(2);
@@ -32,8 +56,20 @@ test("findDuplicateVideos keeps the first occurrence only", () => {
 
 test("findDuplicateVideos skips items without a videoId", () => {
   const result = findDuplicateVideos([
-    { playlistItemId: "a", title: "Private", videoId: null, position: 0, playlistId: "PLabc" },
-    { playlistItemId: "b", title: "Actual", videoId: "video-2", position: 1, playlistId: "PLabc" },
+    {
+      playlistItemId: "a",
+      title: "Private",
+      videoId: null,
+      position: 0,
+      playlistId: "PLabc",
+    },
+    {
+      playlistItemId: "b",
+      title: "Actual",
+      videoId: "video-2",
+      position: 1,
+      playlistId: "PLabc",
+    },
   ]);
 
   expect(result.itemsWithoutVideoId).toBe(1);

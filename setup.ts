@@ -9,6 +9,11 @@ import { inspectOAuthSetup, readOAuthClientFile } from "./auth.js";
 
 const ENV_FILE = ".env";
 const OAUTH_KEYS = [
+  "YT_DDP_OAUTH_CLIENT_ID",
+  "YT_DDP_OAUTH_CLIENT_SECRET",
+  "YT_DDP_OAUTH_CLIENT_JSON",
+  "YT_DDP_OAUTH_CLIENT_JSON_BASE64",
+  "YT_DDP_OAUTH_CLIENT_FILE",
   "YOUTUBE_OAUTH_CLIENT_ID",
   "YOUTUBE_OAUTH_CLIENT_SECRET",
   "YOUTUBE_OAUTH_CLIENT_JSON",
@@ -26,9 +31,11 @@ export async function runSetup(): Promise<void> {
   const suggestedFile = await findSuggestedOAuthClientFile();
   const envPath = resolve(process.cwd(), ENV_FILE);
 
-  console.log("yt-playlist-dedupe setup");
+  console.log("yt-ddp setup");
   console.log("");
-  console.log("This wizard stores your Google Desktop app OAuth credentials in a local .env file.");
+  console.log(
+    "This wizard stores your Google Desktop app OAuth credentials in a local .env file.",
+  );
   console.log(`OAuth token cache: ${setupStatus.tokenPath}`);
   console.log(`Current config: ${setupStatus.source ?? "not set"}`);
 
@@ -63,8 +70,8 @@ export async function runSetup(): Promise<void> {
     const oauthConfig = await readOAuthClientFile(credentialsPath);
     const existingEnv = await loadOptionalFile(envPath);
     const nextEnv = upsertOAuthEnv(existingEnv, {
-      YOUTUBE_OAUTH_CLIENT_ID: oauthConfig.clientId,
-      YOUTUBE_OAUTH_CLIENT_SECRET: oauthConfig.clientSecret,
+      YT_DDP_OAUTH_CLIENT_ID: oauthConfig.clientId,
+      YT_DDP_OAUTH_CLIENT_SECRET: oauthConfig.clientSecret,
     });
 
     await writeFile(envPath, nextEnv);
@@ -72,7 +79,9 @@ export async function runSetup(): Promise<void> {
     console.log("");
     console.log(`Saved OAuth credentials to ${envPath}`);
     console.log("Next steps:");
-    console.log('1. Run `bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"`');
+    console.log(
+      '1. Run `yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID"`',
+    );
     console.log("2. Sign in once when the browser prompt opens.");
     console.log("3. Re-run with --execute when the dry run looks right.");
   } finally {
@@ -117,7 +126,7 @@ export function upsertOAuthEnv(
   }
 
   if (remainingEntries.size > 0) {
-    nextLines.push("# yt-playlist-dedupe OAuth");
+    nextLines.push("# yt-ddp OAuth");
     for (const [key, value] of remainingEntries) {
       nextLines.push(`${key}=${formatEnvValue(value)}`);
     }
@@ -155,7 +164,9 @@ async function promptForCredentialsFile({
           console.log(
             `Could not use ${suggestedFile}: ${error instanceof Error ? error.message : String(error)}`,
           );
-          console.log("Try again with the path to the downloaded Desktop app OAuth JSON.");
+          console.log(
+            "Try again with the path to the downloaded Desktop app OAuth JSON.",
+          );
           continue;
         }
       }
@@ -173,7 +184,9 @@ async function promptForCredentialsFile({
       console.log(
         `Could not use ${resolvedPath}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      console.log("Try again with the path to the downloaded Desktop app OAuth JSON.");
+      console.log(
+        "Try again with the path to the downloaded Desktop app OAuth JSON.",
+      );
     }
   }
 }
@@ -184,7 +197,9 @@ async function findSuggestedOAuthClientFile(): Promise<string | null> {
     const match = entries.find(
       (entry) =>
         entry.isFile() &&
-        /^(oauth-client.*|client_secret.*|credentials.*)\.json$/i.test(entry.name),
+        /^(oauth-client.*|client_secret.*|credentials.*)\.json$/i.test(
+          entry.name,
+        ),
     );
 
     return match ? resolve(process.cwd(), match.name) : null;

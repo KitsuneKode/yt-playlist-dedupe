@@ -31,8 +31,12 @@ export function getProtectedPlaylistName(playlistId: string): string | null {
   return PROTECTED_PLAYLIST_PREFIXES.get(prefix) ?? null;
 }
 
-export function findDuplicateVideos(playlistItems: PlaylistItemSummary[]): DeduplicationResult {
-  const sortedItems = [...playlistItems].sort((left, right) => left.position - right.position);
+export function findDuplicateVideos(
+  playlistItems: PlaylistItemSummary[],
+): DeduplicationResult {
+  const sortedItems = [...playlistItems].sort(
+    (left, right) => left.position - right.position,
+  );
   const firstSeenByVideoId = new Map<string, PlaylistItemSummary>();
   const duplicates: DuplicatePlaylistItem[] = [];
   let itemsWithoutVideoId = 0;

@@ -1,31 +1,26 @@
-# yt-playlist-dedupe
+# @kitsunekode/yt-ddp
 
-Safe Bun + TypeScript CLI for finding and removing duplicate videos from one YouTube playlist.
+`yt-ddp` is a safe CLI for finding and removing duplicate videos from one YouTube playlist.
 
 Default behavior is a dry run. Nothing is deleted unless you pass `--execute` and either confirm with `yes` or explicitly opt into `--yes`.
 
-It accepts either a raw playlist ID or a full YouTube playlist/watch URL, and includes a guided `setup` command for first-run OAuth configuration.
-
-## What It Does
-
-- Authenticates with Google using the installed-app OAuth flow
-- Scans exactly one playlist via `playlistItems.list`
-- Detects duplicates by `snippet.resourceId.videoId`
-- Keeps the first occurrence only
-- Deletes duplicates with `playlistItems.delete` only when you opt in
-- Persists the OAuth token locally so you do not have to re-authenticate every run
-- Retries transient delete failures with exponential backoff and jitter
-
-## Safety Guardrails
-
-- Dry run is the default mode
-- Deletion requires `--execute`
-- Deletion also requires typing `yes`, unless you deliberately pass `--yes`
-- Only the playlist you pass is scanned
-- Known protected/system playlist prefixes are blocked, including Liked Videos, Watch Later, Watch History, and Uploads
-- OAuth tokens are stored outside the repo by default
+It accepts either a raw playlist ID or a full YouTube playlist/watch URL, includes a guided `setup` command for first-run OAuth configuration, and is ready to publish as a scoped npm package.
 
 ## Install
+
+Global install from npm:
+
+```bash
+npm install -g @kitsunekode/yt-ddp
+```
+
+Run without installing:
+
+```bash
+npx @kitsunekode/yt-ddp --help
+```
+
+Local development:
 
 ```bash
 bun install
@@ -33,12 +28,34 @@ bun install
 
 ## Quick Start
 
+Published package:
+
+```bash
+yt-ddp setup
+yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID"
+```
+
+Local repo:
+
 ```bash
 bun run setup
 bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 ```
 
 The setup wizard asks for the Google Desktop app OAuth JSON you downloaded from Google Cloud Console, then saves the client ID and secret into a local `.env` file.
+
+## Commands
+
+- `yt-ddp setup`
+- `yt-ddp <playlist-id-or-url>`
+- `yt-ddp scan --playlist <playlist-id-or-url>`
+
+### Useful flags
+
+- `--playlist` for explicit input
+- `--execute` to delete duplicates
+- `--yes` to skip the final delete confirmation
+- `--help` to print usage
 
 ## Setup
 
@@ -64,6 +81,12 @@ The setup wizard asks for the Google Desktop app OAuth JSON you downloaded from 
 ### 4. Run the setup wizard
 
 ```bash
+yt-ddp setup
+```
+
+Or locally:
+
+```bash
 bun run setup
 ```
 
@@ -76,74 +99,90 @@ If you prefer not to use the wizard, you can still configure credentials manuall
 Option A: provide the values directly:
 
 ```bash
-export YOUTUBE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
-export YOUTUBE_OAUTH_CLIENT_SECRET=your-client-secret
+export YT_DDP_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+export YT_DDP_OAUTH_CLIENT_SECRET=your-client-secret
 ```
 
 Option B: provide the downloaded Desktop app JSON via env as base64:
 
 ```bash
-export YOUTUBE_OAUTH_CLIENT_JSON_BASE64="$(base64 -w 0 /absolute/path/to/oauth-client.json)"
+export YT_DDP_OAUTH_CLIENT_JSON_BASE64="$(base64 -w 0 /absolute/path/to/oauth-client.json)"
 ```
 
 Option C: point to the downloaded Desktop app JSON file:
 
 ```bash
-export YOUTUBE_OAUTH_CLIENT_FILE=/absolute/path/to/oauth-client.json
+export YT_DDP_OAUTH_CLIENT_FILE=/absolute/path/to/oauth-client.json
 ```
 
-Bun automatically loads `.env`, so you can also place those variables in a local `.env` file.
+Backward-compatible legacy `YOUTUBE_*` and `YT_PLAYLIST_DEDUPE_*` env vars are still accepted.
 
-## Run
+## Examples
 
 Dry run with a playlist ID:
 
 ```bash
-bun run start -- PLAYLIST_ID
+yt-ddp PLAYLIST_ID
 ```
 
-Dry run with a full playlist URL:
+Dry run with a playlist URL:
 
 ```bash
-bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"
+yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 ```
 
 Dry run with a watch URL that includes `list=...`:
 
 ```bash
-bun run start -- "https://www.youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID"
+yt-ddp "https://www.youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID"
 ```
 
 Use the explicit playlist flag:
 
 ```bash
-bun run start -- --playlist PLAYLIST_ID
+yt-ddp --playlist PLAYLIST_ID
 ```
 
 Execute deletions:
 
 ```bash
-bun run start -- PLAYLIST_ID --execute
+yt-ddp PLAYLIST_ID --execute
 ```
 
 Skip the final confirmation prompt:
 
 ```bash
-bun run start -- PLAYLIST_ID --execute --yes
+yt-ddp PLAYLIST_ID --execute --yes
 ```
 
-## First Run
+## Global Link / Unlink
 
-1. Run a dry scan with your playlist ID or playlist URL.
-2. The CLI will print an OAuth URL and try to open it in your browser.
-3. Sign in with the Google account that owns the playlist.
-4. Approve access for the requested YouTube scope.
-5. Return to the terminal after the local callback completes.
+Make the local repo available globally as `yt-ddp`:
+
+```bash
+bun run link:global
+yt-ddp --help
+```
+
+Remove the global link:
+
+```bash
+bun run unlink:global
+```
+
+## Production Scripts
+
+- `bun run check` runs Biome checks, typecheck, and tests.
+- `bun run build` creates the publishable `dist/` output.
+- `bun run smoke:built` verifies the built CLI runs under Node.
+- `bun run pack:dry-run` verifies the npm tarball contents.
+- `bun run publish:check` runs the full release gate.
+- `npm publish --access public` publishes the package.
 
 ## Example Output
 
 ```text
-yt-playlist-dedupe
+yt-ddp
 
 Mode: Dry run
 Playlist: PLxxxxxxxxxxxxxxxx
@@ -166,13 +205,13 @@ Duplicate items to remove:
 By default the OAuth token is saved to:
 
 ```text
-~/.config/yt-playlist-dedupe/oauth-token.json
+~/.config/yt-ddp/oauth-token.json
 ```
 
 Override that location with:
 
 ```bash
-export YT_PLAYLIST_DEDUPE_CONFIG_DIR=/custom/config/dir
+export YT_DDP_CONFIG_DIR=/custom/config/dir
 ```
 
 If the saved token becomes invalid, the CLI removes it and starts a fresh authorization flow automatically.
@@ -187,16 +226,16 @@ If the saved token becomes invalid, the CLI removes it and starts a fresh author
 
 ## Development
 
-Run tests:
+Run the full production-oriented gate:
 
 ```bash
-bun test
+bun run publish:check
 ```
 
-Run typechecking:
+Auto-fix formatting and safe lint issues:
 
 ```bash
-bun run typecheck
+bun run fix
 ```
 
 ## License

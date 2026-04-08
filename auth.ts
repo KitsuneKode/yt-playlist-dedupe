@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, chmod, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -16,8 +16,12 @@ export interface Logger {
 }
 
 export type OAuthClient = InstanceType<typeof google.auth.OAuth2>;
-type OAuthCredentials = NonNullable<Parameters<OAuthClient["setCredentials"]>[0]>;
-type GenerateAuthUrlOptions = NonNullable<Parameters<OAuthClient["generateAuthUrl"]>[0]>;
+type OAuthCredentials = NonNullable<
+  Parameters<OAuthClient["setCredentials"]>[0]
+>;
+type GenerateAuthUrlOptions = NonNullable<
+  Parameters<OAuthClient["generateAuthUrl"]>[0]
+>;
 
 interface OAuthConfig {
   clientId: string;
@@ -105,7 +109,8 @@ async function authorizeInteractively({
   registerTokenPersistence(oauthClient, tokenPath, logger);
 
   try {
-    const { codeVerifier, codeChallenge } = await oauthClient.generateCodeVerifierAsync();
+    const { codeVerifier, codeChallenge } =
+      await oauthClient.generateCodeVerifierAsync();
     const codeChallengeMethod =
       "S256" as GenerateAuthUrlOptions["code_challenge_method"];
     const authUrl = oauthClient.generateAuthUrl({
@@ -121,7 +126,9 @@ async function authorizeInteractively({
     logger.log("");
     logger.log("Open this URL to authorize the CLI:");
     logger.log(authUrl);
-    logger.log("If your browser does not open automatically, paste the URL into your browser manually.");
+    logger.log(
+      "If your browser does not open automatically, paste the URL into your browser manually.",
+    );
     logger.log("");
 
     openBrowser(authUrl);
@@ -148,10 +155,12 @@ async function startLoopbackServer(): Promise<LoopbackServerState> {
   let resolveCodePromise!: (value: OAuthCallbackPayload) => void;
   let rejectCodePromise!: (reason?: unknown) => void;
 
-  const codePromise = new Promise<OAuthCallbackPayload>((resolveCode, rejectCode) => {
-    resolveCodePromise = resolveCode;
-    rejectCodePromise = rejectCode;
-  });
+  const codePromise = new Promise<OAuthCallbackPayload>(
+    (resolveCode, rejectCode) => {
+      resolveCodePromise = resolveCode;
+      rejectCodePromise = rejectCode;
+    },
+  );
 
   const server = createServer((request, response) => {
     handleOAuthCallback({
@@ -174,17 +183,29 @@ async function startLoopbackServer(): Promise<LoopbackServerState> {
 
   const redirectUri = `http://127.0.0.1:${address.port}${CALLBACK_PATH}`;
 
-  async function waitForCode(expectedState: string, logger: Logger): Promise<string> {
-    const timeout = setTimeout(() => {
-      rejectCodePromise(new Error("Timed out waiting for OAuth authorization."));
-    }, 5 * 60 * 1000);
+  async function waitForCode(
+    expectedState: string,
+    logger: Logger,
+  ): Promise<string> {
+    const timeout = setTimeout(
+      () => {
+        rejectCodePromise(
+          new Error("Timed out waiting for OAuth authorization."),
+        );
+      },
+      5 * 60 * 1000,
+    );
 
     try {
-      logger.log("Waiting for the browser callback on a local loopback port...");
+      logger.log(
+        "Waiting for the browser callback on a local loopback port...",
+      );
       const { code, state } = await codePromise;
 
       if (!code) {
-        throw new Error("OAuth callback did not include an authorization code.");
+        throw new Error(
+          "OAuth callback did not include an authorization code.",
+        );
       }
 
       if (state !== expectedState) {
@@ -226,13 +247,17 @@ function handleOAuthCallback({
 
     if (authError) {
       response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
-      response.end("Authorization failed. You can close this tab and return to the terminal.");
+      response.end(
+        "Authorization failed. You can close this tab and return to the terminal.",
+      );
       rejectCodePromise(new Error(`Authorization failed: ${authError}`));
       return;
     }
 
     response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-    response.end("Authorization received. You can close this tab and return to the terminal.");
+    response.end(
+      "Authorization received. You can close this tab and return to the terminal.",
+    );
     resolveCodePromise({ code, state });
   } catch (error) {
     response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
@@ -253,13 +278,14 @@ async function loadOAuthConfig(): Promise<OAuthConfig> {
   }
 
   const credentialsPath =
+    process.env.YT_DDP_OAUTH_CLIENT_FILE ??
     process.env.YOUTUBE_OAUTH_CLIENT_FILE ??
     process.env.GOOGLE_OAUTH_CLIENT_FILE ??
     null;
 
   if (!credentialsPath) {
     throw new Error(
-      "Missing OAuth client configuration. Run the setup command, or set YOUTUBE_OAUTH_CLIENT_ID and YOUTUBE_OAUTH_CLIENT_SECRET, set YOUTUBE_OAUTH_CLIENT_JSON_BASE64, or set YOUTUBE_OAUTH_CLIENT_FILE to a Desktop app OAuth client JSON file.",
+      "Missing OAuth client configuration. Run the setup command, or set YT_DDP_OAUTH_CLIENT_ID and YT_DDP_OAUTH_CLIENT_SECRET, set YT_DDP_OAUTH_CLIENT_JSON_BASE64, or set YT_DDP_OAUTH_CLIENT_FILE to a Desktop app OAuth client JSON file.",
     );
   }
 
@@ -284,6 +310,7 @@ export function inspectOAuthSetup(): OAuthSetupStatus {
   }
 
   const credentialsPath =
+    process.env.YT_DDP_OAUTH_CLIENT_FILE ??
     process.env.YOUTUBE_OAUTH_CLIENT_FILE ??
     process.env.GOOGLE_OAUTH_CLIENT_FILE ??
     null;
@@ -303,17 +330,21 @@ export function inspectOAuthSetup(): OAuthSetupStatus {
   };
 }
 
-export async function readOAuthClientFile(filePath: string): Promise<OAuthConfig> {
+export async function readOAuthClientFile(
+  filePath: string,
+): Promise<OAuthConfig> {
   const raw = await readFile(resolve(filePath), "utf8");
   return parseInstalledClientJson(raw, "OAuth client file");
 }
 
 function loadOAuthConfigFromEnv(): OAuthConfig | null {
   const clientId =
+    process.env.YT_DDP_OAUTH_CLIENT_ID ??
     process.env.YOUTUBE_OAUTH_CLIENT_ID ??
     process.env.GOOGLE_OAUTH_CLIENT_ID ??
     null;
   const clientSecret =
+    process.env.YT_DDP_OAUTH_CLIENT_SECRET ??
     process.env.YOUTUBE_OAUTH_CLIENT_SECRET ??
     process.env.GOOGLE_OAUTH_CLIENT_SECRET ??
     null;
@@ -327,6 +358,7 @@ function loadOAuthConfigFromEnv(): OAuthConfig | null {
 
 function loadOAuthConfigFromJsonEnv(): OAuthConfig | null {
   const rawJson =
+    process.env.YT_DDP_OAUTH_CLIENT_JSON ??
     process.env.YOUTUBE_OAUTH_CLIENT_JSON ??
     process.env.GOOGLE_OAUTH_CLIENT_JSON ??
     null;
@@ -336,6 +368,7 @@ function loadOAuthConfigFromJsonEnv(): OAuthConfig | null {
   }
 
   const base64Json =
+    process.env.YT_DDP_OAUTH_CLIENT_JSON_BASE64 ??
     process.env.YOUTUBE_OAUTH_CLIENT_JSON_BASE64 ??
     process.env.GOOGLE_OAUTH_CLIENT_JSON_BASE64 ??
     null;
@@ -346,16 +379,20 @@ function loadOAuthConfigFromJsonEnv(): OAuthConfig | null {
 
   try {
     const decoded = Buffer.from(base64Json, "base64").toString("utf8");
-    return parseInstalledClientJson(decoded, "YOUTUBE_OAUTH_CLIENT_JSON_BASE64");
+    return parseInstalledClientJson(
+      decoded,
+      "YOUTUBE_OAUTH_CLIENT_JSON_BASE64",
+    );
   } catch (error) {
     throw new Error(
-      `Failed to decode YOUTUBE_OAUTH_CLIENT_JSON_BASE64: ${getErrorMessage(error)}`,
+      `Failed to decode YT_DDP_OAUTH_CLIENT_JSON_BASE64: ${getErrorMessage(error)}`,
     );
   }
 }
 
 function getTokenPath(): string {
-  const configuredDir = process.env.YT_PLAYLIST_DEDUPE_CONFIG_DIR;
+  const configuredDir =
+    process.env.YT_DDP_CONFIG_DIR ?? process.env.YT_PLAYLIST_DEDUPE_CONFIG_DIR;
   if (configuredDir) {
     return join(resolve(configuredDir), TOKEN_FILENAME);
   }
@@ -365,10 +402,12 @@ function getTokenPath(): string {
     process.env.APPDATA ??
     join(homedir(), ".config");
 
-  return join(baseDir, "yt-playlist-dedupe", TOKEN_FILENAME);
+  return join(baseDir, "yt-ddp", TOKEN_FILENAME);
 }
 
-async function loadSavedTokens(tokenPath: string): Promise<OAuthCredentials | null> {
+async function loadSavedTokens(
+  tokenPath: string,
+): Promise<OAuthCredentials | null> {
   try {
     const raw = await readFile(tokenPath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
@@ -400,12 +439,17 @@ function registerTokenPersistence(
         ...tokens,
       } as OAuthCredentials);
     } catch (error) {
-      logger.warn(`Failed to persist refreshed OAuth token: ${getErrorMessage(error)}`);
+      logger.warn(
+        `Failed to persist refreshed OAuth token: ${getErrorMessage(error)}`,
+      );
     }
   });
 }
 
-async function persistTokens(tokenPath: string, tokens: OAuthCredentials): Promise<void> {
+async function persistTokens(
+  tokenPath: string,
+  tokens: OAuthCredentials,
+): Promise<void> {
   await mkdir(dirname(tokenPath), { recursive: true, mode: 0o700 });
   await writeFile(tokenPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
   await chmod(tokenPath, 0o600).catch(() => {});
@@ -439,7 +483,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function parseInstalledClientJson(raw: string, sourceLabel: string): OAuthConfig {
+function parseInstalledClientJson(
+  raw: string,
+  sourceLabel: string,
+): OAuthConfig {
   const parsed = JSON.parse(raw) as InstalledClientFile;
   const clientId = parsed.installed?.client_id;
   const clientSecret = parsed.installed?.client_secret;

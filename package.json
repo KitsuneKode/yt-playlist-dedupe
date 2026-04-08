@@ -1,20 +1,63 @@
 {
-  "name": "yt-playlist-dedupe",
+  "name": "@kitsunekode/yt-ddp",
+  "version": "0.1.0",
+  "description": "CLI for safely finding and removing duplicate videos from a YouTube playlist.",
   "type": "module",
-  "private": true,
+  "license": "MIT",
+  "author": "KitsuneKode",
+  "homepage": "https://github.com/KitsuneKode/yt-playlist-dedupe#readme",
+  "bugs": {
+    "url": "https://github.com/KitsuneKode/yt-playlist-dedupe/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KitsuneKode/yt-playlist-dedupe.git"
+  },
+  "keywords": [
+    "youtube",
+    "playlist",
+    "dedupe",
+    "cli",
+    "npm"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
-    "yt-playlist-dedupe": "./index.ts"
+    "yt-ddp": "./dist/index.js"
   },
   "scripts": {
     "start": "bun run index.ts",
     "setup": "bun run index.ts setup",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node -e \"require('node:fs').chmodSync('dist/index.js', 0o755)\"",
+    "lint": "biome lint .",
+    "format": "biome format . --write",
+    "check:biome": "biome check .",
+    "fix": "biome check . --write",
+    "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "check": "bun run check:biome && bun run typecheck && bun run test",
+    "smoke:built": "node dist/index.js --help",
+    "pack:dry-run": "npm pack --dry-run",
+    "link:global": "bun run build && npm link",
+    "unlink:global": "npm unlink -g @kitsunekode/yt-ddp",
+    "publish:check": "bun run check && bun run build && bun run smoke:built && bun run pack:dry-run",
+    "prepublishOnly": "bun run publish:check"
   },
   "dependencies": {
     "googleapis": "^171.4.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
     "@types/bun": "latest",
     "typescript": "latest"
   }

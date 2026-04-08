@@ -2,7 +2,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { google, type youtube_v3 } from "googleapis";
 import type { Logger, OAuthClient } from "./auth.js";
 
-export const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl";
+export const YOUTUBE_SCOPE =
+  "https://www.googleapis.com/auth/youtube.force-ssl";
 const PLAYLIST_PAGE_SIZE = 50;
 
 export interface PlaylistItemSummary {
@@ -57,7 +58,8 @@ export async function listPlaylistItems({
       playlistId,
       maxResults: PLAYLIST_PAGE_SIZE,
       pageToken: nextPageToken,
-      fields: "nextPageToken,items(id,snippet(title,position,playlistId,resourceId/videoId))",
+      fields:
+        "nextPageToken,items(id,snippet(title,position,playlistId,resourceId/videoId))",
     });
 
     for (const rawItem of response.data.items ?? []) {
@@ -139,11 +141,25 @@ export function isRetryableApiError(error: unknown): boolean {
     return true;
   }
 
-  if (reason !== null && ["backendError", "rateLimitExceeded", "userRateLimitExceeded"].includes(reason)) {
+  if (
+    reason !== null &&
+    ["backendError", "rateLimitExceeded", "userRateLimitExceeded"].includes(
+      reason,
+    )
+  ) {
     return true;
   }
 
-  if (code !== null && ["ECONNRESET", "ENOTFOUND", "ETIMEDOUT", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"].includes(code)) {
+  if (
+    code !== null &&
+    [
+      "ECONNRESET",
+      "ENOTFOUND",
+      "ETIMEDOUT",
+      "EAI_AGAIN",
+      "UND_ERR_CONNECT_TIMEOUT",
+    ].includes(code)
+  ) {
     return true;
   }
 
@@ -168,11 +184,19 @@ export function formatApiError(error: unknown): string {
     return "The playlist items are not accessible with the current account or scope.";
   }
 
-  if ((status === 400 || status === 404) && ["playlistNotFound", "invalidPlaylistId"].includes(reason ?? "")) {
+  if (
+    (status === 400 || status === 404) &&
+    ["playlistNotFound", "invalidPlaylistId"].includes(reason ?? "")
+  ) {
     return "The playlist ID is invalid or the playlist is not accessible.";
   }
 
-  if (status === 403 && ["quotaExceeded", "rateLimitExceeded", "userRateLimitExceeded"].includes(reason ?? "")) {
+  if (
+    status === 403 &&
+    ["quotaExceeded", "rateLimitExceeded", "userRateLimitExceeded"].includes(
+      reason ?? "",
+    )
+  ) {
     return "The YouTube Data API quota or rate limit was exceeded.";
   }
 
@@ -189,7 +213,9 @@ export function formatApiError(error: unknown): string {
 
 export function getStatusCode(error: unknown): number | null {
   const errorLike = getErrorLike(error);
-  return typeof errorLike.response?.status === "number" ? errorLike.response.status : null;
+  return typeof errorLike.response?.status === "number"
+    ? errorLike.response.status
+    : null;
 }
 
 export function getErrorReason(error: unknown): string | null {
@@ -222,5 +248,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 function getErrorLike(error: unknown): ErrorLike {
-  return typeof error === "object" && error !== null ? (error as ErrorLike) : {};
+  return typeof error === "object" && error !== null
+    ? (error as ErrorLike)
+    : {};
 }

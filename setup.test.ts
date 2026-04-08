@@ -4,14 +4,14 @@ import { upsertOAuthEnv } from "./setup.js";
 test("upsertOAuthEnv adds OAuth credentials to an empty env file", () => {
   expect(
     upsertOAuthEnv("", {
-      YOUTUBE_OAUTH_CLIENT_ID: "client-id.apps.googleusercontent.com",
-      YOUTUBE_OAUTH_CLIENT_SECRET: "secret-value",
+      YT_DDP_OAUTH_CLIENT_ID: "client-id.apps.googleusercontent.com",
+      YT_DDP_OAUTH_CLIENT_SECRET: "secret-value",
     }),
   ).toBe(
     [
-      "# yt-playlist-dedupe OAuth",
-      "YOUTUBE_OAUTH_CLIENT_ID=client-id.apps.googleusercontent.com",
-      "YOUTUBE_OAUTH_CLIENT_SECRET=secret-value",
+      "# yt-ddp OAuth",
+      "YT_DDP_OAUTH_CLIENT_ID=client-id.apps.googleusercontent.com",
+      "YT_DDP_OAUTH_CLIENT_SECRET=secret-value",
       "",
     ].join("\n"),
   );
@@ -27,16 +27,16 @@ test("upsertOAuthEnv preserves unrelated env values and removes legacy OAuth key
 
   expect(
     upsertOAuthEnv(existing, {
-      YOUTUBE_OAUTH_CLIENT_ID: "client-id.apps.googleusercontent.com",
-      YOUTUBE_OAUTH_CLIENT_SECRET: "secret-value",
+      YT_DDP_OAUTH_CLIENT_ID: "client-id.apps.googleusercontent.com",
+      YT_DDP_OAUTH_CLIENT_SECRET: "secret-value",
     }),
   ).toBe(
     [
       "FOO=bar",
       "",
-      "# yt-playlist-dedupe OAuth",
-      "YOUTUBE_OAUTH_CLIENT_ID=client-id.apps.googleusercontent.com",
-      "YOUTUBE_OAUTH_CLIENT_SECRET=secret-value",
+      "# yt-ddp OAuth",
+      "YT_DDP_OAUTH_CLIENT_ID=client-id.apps.googleusercontent.com",
+      "YT_DDP_OAUTH_CLIENT_SECRET=secret-value",
       "",
     ].join("\n"),
   );
