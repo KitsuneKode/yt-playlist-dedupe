@@ -169,3 +169,7 @@ Run typechecking:
 ```bash
 bun run typecheck
 ```
+
+## License
+
+MIT. See [LICENSE](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/LICENSE).
