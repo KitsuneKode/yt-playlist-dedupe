@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -8,7 +15,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { google } from "googleapis";
 
 const CALLBACK_PATH = "/oauth2callback";
+const OAUTH_CLIENT_FILENAME = "oauth-client.json";
 const TOKEN_FILENAME = "oauth-token.json";
+const WORKSPACE_OAUTH_FILE_PATTERNS = [
+  /^client_secret.*\.json$/i,
+  /^oauth-client.*\.json$/i,
+  /^google.*oauth.*\.json$/i,
+  /^credentials.*\.json$/i,
+  /^client.*\.json$/i,
+] as const;
 
 export interface Logger {
   log: (...args: unknown[]) => void;
@@ -23,15 +38,66 @@ type GenerateAuthUrlOptions = NonNullable<
   Parameters<OAuthClient["generateAuthUrl"]>[0]
 >;
 
-interface OAuthConfig {
+const CLIENT_ID_ENV_KEYS = [
+  "YT_DDP_OAUTH_CLIENT_ID",
+  "YOUTUBE_OAUTH_CLIENT_ID",
+  "GOOGLE_OAUTH_CLIENT_ID",
+] as const;
+const CLIENT_SECRET_ENV_KEYS = [
+  "YT_DDP_OAUTH_CLIENT_SECRET",
+  "YOUTUBE_OAUTH_CLIENT_SECRET",
+  "GOOGLE_OAUTH_CLIENT_SECRET",
+] as const;
+const CLIENT_JSON_ENV_KEYS = [
+  "YT_DDP_OAUTH_CLIENT_JSON",
+  "YOUTUBE_OAUTH_CLIENT_JSON",
+  "GOOGLE_OAUTH_CLIENT_JSON",
+] as const;
+const CLIENT_JSON_BASE64_ENV_KEYS = [
+  "YT_DDP_OAUTH_CLIENT_JSON_BASE64",
+  "YOUTUBE_OAUTH_CLIENT_JSON_BASE64",
+  "GOOGLE_OAUTH_CLIENT_JSON_BASE64",
+] as const;
+const CLIENT_FILE_ENV_KEYS = [
+  "YT_DDP_OAUTH_CLIENT_FILE",
+  "YOUTUBE_OAUTH_CLIENT_FILE",
+  "GOOGLE_OAUTH_CLIENT_FILE",
+] as const;
+
+export interface OAuthConfig {
   clientId: string;
   clientSecret: string;
 }
 
+export type OAuthSourceKind =
+  | "env-client"
+  | "env-json"
+  | "env-file"
+  | "app-config"
+  | "workspace-file";
+
 export interface OAuthSetupStatus {
   configured: boolean;
   source: string | null;
+  sourceKind: OAuthSourceKind | null;
   tokenPath: string;
+  clientConfigPath: string;
+  suggestedClientFile: string | null;
+}
+
+export interface OAuthSourceResolution {
+  config: OAuthConfig | null;
+  source: string | null;
+  sourceKind: OAuthSourceKind | null;
+  tokenPath: string;
+  clientConfigPath: string;
+  suggestedClientFile: string | null;
+}
+
+export interface OAuthResolutionOptions {
+  configDir?: string;
+  env?: NodeJS.ProcessEnv;
+  workspaceDir?: string;
 }
 
 interface LoopbackServerState {
@@ -59,8 +125,18 @@ export async function getAuthenticatedClient({
   scope: string;
   logger?: Logger;
 }): Promise<OAuthClient> {
-  const oauthConfig = await loadOAuthConfig();
-  const tokenPath = getTokenPath();
+  const resolution = await resolveOAuthSource();
+  const oauthConfig = resolution.config;
+  const tokenPath = resolution.tokenPath;
+
+  if (!oauthConfig) {
+    throw createMissingOAuthConfigError(
+      resolution.suggestedClientFile
+        ? dirname(resolution.suggestedClientFile)
+        : process.cwd(),
+    );
+  }
+
   const savedTokens = await loadSavedTokens(tokenPath);
 
   if (savedTokens) {
@@ -266,67 +342,96 @@ function handleOAuthCallback({
   }
 }
 
-async function loadOAuthConfig(): Promise<OAuthConfig> {
-  const configFromEnv = loadOAuthConfigFromEnv();
+export async function resolveOAuthSource(
+  options: OAuthResolutionOptions = {},
+): Promise<OAuthSourceResolution> {
+  const env = options.env ?? process.env;
+  const workspaceDir = resolve(options.workspaceDir ?? process.cwd());
+  const clientConfigPath = getClientConfigPath(options);
+  const tokenPath = getTokenPath(options);
+  const suggestedClientFile = await findWorkspaceOAuthClientFile({
+    workspaceDir,
+  });
+
+  const configFromEnv = loadOAuthConfigFromEnv(env);
   if (configFromEnv) {
-    return configFromEnv;
-  }
-
-  const configFromJsonEnv = loadOAuthConfigFromJsonEnv();
-  if (configFromJsonEnv) {
-    return configFromJsonEnv;
-  }
-
-  const credentialsPath =
-    process.env.YT_DDP_OAUTH_CLIENT_FILE ??
-    process.env.YOUTUBE_OAUTH_CLIENT_FILE ??
-    process.env.GOOGLE_OAUTH_CLIENT_FILE ??
-    null;
-
-  if (!credentialsPath) {
-    throw new Error(
-      "Missing OAuth client configuration. Run the setup command, or set YT_DDP_OAUTH_CLIENT_ID and YT_DDP_OAUTH_CLIENT_SECRET, set YT_DDP_OAUTH_CLIENT_JSON_BASE64, or set YT_DDP_OAUTH_CLIENT_FILE to a Desktop app OAuth client JSON file.",
-    );
-  }
-
-  return readOAuthClientFile(credentialsPath);
-}
-
-export function inspectOAuthSetup(): OAuthSetupStatus {
-  if (loadOAuthConfigFromEnv()) {
     return {
-      configured: true,
+      clientConfigPath,
+      config: configFromEnv,
       source: "environment variables (client ID + secret)",
-      tokenPath: getTokenPath(),
+      sourceKind: "env-client",
+      suggestedClientFile,
+      tokenPath,
     };
   }
 
-  if (loadOAuthConfigFromJsonEnv()) {
+  const configFromJsonEnv = loadOAuthConfigFromJsonEnv(env);
+  if (configFromJsonEnv) {
     return {
-      configured: true,
+      clientConfigPath,
+      config: configFromJsonEnv,
       source: "environment variables (OAuth client JSON)",
-      tokenPath: getTokenPath(),
+      sourceKind: "env-json",
+      suggestedClientFile,
+      tokenPath,
     };
   }
 
-  const credentialsPath =
-    process.env.YT_DDP_OAUTH_CLIENT_FILE ??
-    process.env.YOUTUBE_OAUTH_CLIENT_FILE ??
-    process.env.GOOGLE_OAUTH_CLIENT_FILE ??
-    null;
-
-  if (credentialsPath) {
+  const configuredClientFilePath = getConfiguredOAuthClientFilePath(env);
+  if (configuredClientFilePath) {
     return {
-      configured: true,
-      source: `OAuth client file (${resolve(credentialsPath)})`,
-      tokenPath: getTokenPath(),
+      clientConfigPath,
+      config: await readOAuthClientFile(configuredClientFilePath),
+      source: `OAuth client file (${resolve(configuredClientFilePath)})`,
+      sourceKind: "env-file",
+      suggestedClientFile,
+      tokenPath,
+    };
+  }
+
+  const persistedConfig =
+    await loadPersistedOAuthClientConfig(clientConfigPath);
+  if (persistedConfig) {
+    return {
+      clientConfigPath,
+      config: persistedConfig,
+      source: `yt-ddp app config (${clientConfigPath})`,
+      sourceKind: "app-config",
+      suggestedClientFile,
+      tokenPath,
+    };
+  }
+
+  if (suggestedClientFile) {
+    return {
+      clientConfigPath,
+      config: await readOAuthClientFile(suggestedClientFile),
+      source: `workspace OAuth client file (${suggestedClientFile})`,
+      sourceKind: "workspace-file",
+      suggestedClientFile,
+      tokenPath,
     };
   }
 
   return {
-    configured: false,
+    clientConfigPath,
+    config: null,
     source: null,
-    tokenPath: getTokenPath(),
+    sourceKind: null,
+    suggestedClientFile: null,
+    tokenPath,
+  };
+}
+
+export async function inspectOAuthSetup(): Promise<OAuthSetupStatus> {
+  const resolution = await resolveOAuthSource();
+  return {
+    configured: resolution.config !== null,
+    source: resolution.source,
+    sourceKind: resolution.sourceKind,
+    tokenPath: resolution.tokenPath,
+    clientConfigPath: resolution.clientConfigPath,
+    suggestedClientFile: resolution.suggestedClientFile,
   };
 }
 
@@ -337,17 +442,66 @@ export async function readOAuthClientFile(
   return parseInstalledClientJson(raw, "OAuth client file");
 }
 
-function loadOAuthConfigFromEnv(): OAuthConfig | null {
-  const clientId =
-    process.env.YT_DDP_OAUTH_CLIENT_ID ??
-    process.env.YOUTUBE_OAUTH_CLIENT_ID ??
-    process.env.GOOGLE_OAUTH_CLIENT_ID ??
-    null;
-  const clientSecret =
-    process.env.YT_DDP_OAUTH_CLIENT_SECRET ??
-    process.env.YOUTUBE_OAUTH_CLIENT_SECRET ??
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET ??
-    null;
+export async function savePersistedOAuthClientConfig(
+  oauthConfig: OAuthConfig,
+  options: OAuthResolutionOptions = {},
+): Promise<string> {
+  const clientConfigPath = getClientConfigPath(options);
+  await mkdir(dirname(clientConfigPath), { recursive: true, mode: 0o700 });
+  await writeFile(clientConfigPath, JSON.stringify(oauthConfig, null, 2), {
+    mode: 0o600,
+  });
+  await chmod(clientConfigPath, 0o600).catch(() => {});
+  return clientConfigPath;
+}
+
+async function findWorkspaceOAuthClientFile({
+  workspaceDir,
+}: {
+  workspaceDir: string;
+}): Promise<string | null> {
+  const entries = await listWorkspaceOAuthCandidates(workspaceDir);
+
+  for (const entry of entries) {
+    const candidatePath = resolve(workspaceDir, entry.name);
+
+    try {
+      await readOAuthClientFile(candidatePath);
+      return candidatePath;
+    } catch {
+      // Ignore similarly named files that are not Google Desktop OAuth clients.
+    }
+  }
+
+  return null;
+}
+
+async function listWorkspaceOAuthCandidates(
+  workspaceDir: string,
+): Promise<Array<{ name: string }>> {
+  try {
+    const entries = await readdir(workspaceDir, { withFileTypes: true });
+
+    return entries
+      .filter(
+        (entry) =>
+          entry.isFile() && isLikelyWorkspaceOAuthClientFile(entry.name),
+      )
+      .sort(
+        (left, right) =>
+          scoreWorkspaceOAuthClientFile(right.name) -
+            scoreWorkspaceOAuthClientFile(left.name) ||
+          left.name.localeCompare(right.name),
+      )
+      .map((entry) => ({ name: entry.name }));
+  } catch {
+    return [];
+  }
+}
+
+function loadOAuthConfigFromEnv(env: NodeJS.ProcessEnv): OAuthConfig | null {
+  const clientId = getFirstDefinedEnvValue(env, CLIENT_ID_ENV_KEYS);
+  const clientSecret = getFirstDefinedEnvValue(env, CLIENT_SECRET_ENV_KEYS);
 
   if (!clientId || !clientSecret) {
     return null;
@@ -356,22 +510,16 @@ function loadOAuthConfigFromEnv(): OAuthConfig | null {
   return { clientId, clientSecret };
 }
 
-function loadOAuthConfigFromJsonEnv(): OAuthConfig | null {
-  const rawJson =
-    process.env.YT_DDP_OAUTH_CLIENT_JSON ??
-    process.env.YOUTUBE_OAUTH_CLIENT_JSON ??
-    process.env.GOOGLE_OAUTH_CLIENT_JSON ??
-    null;
+function loadOAuthConfigFromJsonEnv(
+  env: NodeJS.ProcessEnv,
+): OAuthConfig | null {
+  const rawJson = getFirstDefinedEnvValue(env, CLIENT_JSON_ENV_KEYS);
 
   if (rawJson) {
-    return parseInstalledClientJson(rawJson, "YOUTUBE_OAUTH_CLIENT_JSON");
+    return parseInstalledClientJson(rawJson, "YT_DDP_OAUTH_CLIENT_JSON");
   }
 
-  const base64Json =
-    process.env.YT_DDP_OAUTH_CLIENT_JSON_BASE64 ??
-    process.env.YOUTUBE_OAUTH_CLIENT_JSON_BASE64 ??
-    process.env.GOOGLE_OAUTH_CLIENT_JSON_BASE64 ??
-    null;
+  const base64Json = getFirstDefinedEnvValue(env, CLIENT_JSON_BASE64_ENV_KEYS);
 
   if (!base64Json) {
     return null;
@@ -379,10 +527,7 @@ function loadOAuthConfigFromJsonEnv(): OAuthConfig | null {
 
   try {
     const decoded = Buffer.from(base64Json, "base64").toString("utf8");
-    return parseInstalledClientJson(
-      decoded,
-      "YOUTUBE_OAUTH_CLIENT_JSON_BASE64",
-    );
+    return parseInstalledClientJson(decoded, "YT_DDP_OAUTH_CLIENT_JSON_BASE64");
   } catch (error) {
     throw new Error(
       `Failed to decode YT_DDP_OAUTH_CLIENT_JSON_BASE64: ${getErrorMessage(error)}`,
@@ -390,19 +535,51 @@ function loadOAuthConfigFromJsonEnv(): OAuthConfig | null {
   }
 }
 
-function getTokenPath(): string {
+function getConfiguredOAuthClientFilePath(
+  env: NodeJS.ProcessEnv,
+): string | null {
+  return getFirstDefinedEnvValue(env, CLIENT_FILE_ENV_KEYS);
+}
+
+function getClientConfigPath(options: OAuthResolutionOptions = {}): string {
+  return join(getConfigDir(options), OAUTH_CLIENT_FILENAME);
+}
+
+function getTokenPath(options: OAuthResolutionOptions = {}): string {
+  return join(getConfigDir(options), TOKEN_FILENAME);
+}
+
+function getConfigDir(options: OAuthResolutionOptions = {}): string {
+  if (options.configDir) {
+    return resolve(options.configDir);
+  }
+
+  const env = options.env ?? process.env;
   const configuredDir =
-    process.env.YT_DDP_CONFIG_DIR ?? process.env.YT_PLAYLIST_DEDUPE_CONFIG_DIR;
+    env.YT_DDP_CONFIG_DIR ?? env.YT_PLAYLIST_DEDUPE_CONFIG_DIR;
   if (configuredDir) {
-    return join(resolve(configuredDir), TOKEN_FILENAME);
+    return resolve(configuredDir);
   }
 
   const baseDir =
-    process.env.XDG_CONFIG_HOME ??
-    process.env.APPDATA ??
-    join(homedir(), ".config");
+    env.XDG_CONFIG_HOME ?? env.APPDATA ?? join(homedir(), ".config");
 
-  return join(baseDir, "yt-ddp", TOKEN_FILENAME);
+  return join(baseDir, "yt-ddp");
+}
+
+async function loadPersistedOAuthClientConfig(
+  clientConfigPath: string,
+): Promise<OAuthConfig | null> {
+  try {
+    const raw = await readFile(clientConfigPath, "utf8");
+    return parsePersistedOAuthClientConfig(raw, clientConfigPath);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 async function loadSavedTokens(
@@ -483,6 +660,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function parsePersistedOAuthClientConfig(
+  raw: string,
+  sourceLabel: string,
+): OAuthConfig {
+  const parsed = JSON.parse(raw) as unknown;
+
+  if (isRecord(parsed)) {
+    const clientId =
+      typeof parsed.clientId === "string" ? parsed.clientId : null;
+    const clientSecret =
+      typeof parsed.clientSecret === "string" ? parsed.clientSecret : null;
+
+    if (clientId && clientSecret) {
+      return { clientId, clientSecret };
+    }
+  }
+
+  return parseInstalledClientJson(raw, sourceLabel);
+}
+
 function parseInstalledClientJson(
   raw: string,
   sourceLabel: string,
@@ -502,6 +699,40 @@ function parseInstalledClientJson(
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error;
+}
+
+function isLikelyWorkspaceOAuthClientFile(fileName: string): boolean {
+  return WORKSPACE_OAUTH_FILE_PATTERNS.some((pattern) =>
+    pattern.test(fileName),
+  );
+}
+
+function scoreWorkspaceOAuthClientFile(fileName: string): number {
+  const index = WORKSPACE_OAUTH_FILE_PATTERNS.findIndex((pattern) =>
+    pattern.test(fileName),
+  );
+
+  return index === -1 ? -1 : WORKSPACE_OAUTH_FILE_PATTERNS.length - index;
+}
+
+function getFirstDefinedEnvValue(
+  env: NodeJS.ProcessEnv,
+  keys: readonly string[],
+): string | null {
+  for (const key of keys) {
+    const value = env[key];
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function createMissingOAuthConfigError(workspaceDir: string): Error {
+  return new Error(
+    `No OAuth client found. Run \`yt-ddp setup\`, or place your downloaded Desktop app OAuth JSON in ${workspaceDir}. Advanced options: set YT_DDP_OAUTH_CLIENT_ID and YT_DDP_OAUTH_CLIENT_SECRET, YT_DDP_OAUTH_CLIENT_JSON_BASE64, or YT_DDP_OAUTH_CLIENT_FILE.`,
+  );
 }
 
 function getErrorMessage(error: unknown): string {

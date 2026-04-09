@@ -33,8 +33,8 @@ Pending release state:
 ## File Map
 
 - [index.ts](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/index.ts): CLI entrypoint and argument parsing
-- [setup.ts](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/setup.ts): interactive OAuth setup wizard and `.env` updates
-- [auth.ts](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/auth.ts): OAuth config loading, token persistence, browser auth flow
+- [setup.ts](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/setup.ts): interactive OAuth setup wizard and app-config persistence
+- [auth.ts](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/auth.ts): shared OAuth source resolution, token persistence, browser auth flow
 - [dedupe.ts](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/dedupe.ts): duplicate detection and protected playlist logic
 - [youtube.ts](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/youtube.ts): YouTube API access, retries, error mapping
 - [README.md](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/README.md): user-facing install, setup, usage, release docs

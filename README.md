@@ -33,6 +33,8 @@ yt-ddp setup
 yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 ```
 
+If the downloaded Google Desktop app OAuth JSON is already in your current directory with a name like `client_secret*.json` or `client*.json`, `yt-ddp setup` will detect it and pressing Enter will use it.
+
 Local repo:
 
 ```bash
@@ -78,9 +80,16 @@ Useful flags:
 3. Configure the OAuth consent screen.
 4. Create `Desktop app` OAuth credentials.
 5. Download the JSON file.
-6. Run `yt-ddp setup` and paste the JSON path when prompted.
+6. Run `yt-ddp setup` and paste the JSON path when prompted, or just press Enter if the downloaded file is already in the current directory.
+7. `yt-ddp` stores the normalized client config in its local app config directory for future runs.
 
-Manual env-based setup is also supported:
+By default the saved client config and OAuth token live here:
+
+```text
+~/.config/yt-ddp/
+```
+
+Advanced overrides are still supported when you need them:
 
 ```bash
 export YT_DDP_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
@@ -208,12 +217,12 @@ Expected release behavior:
 4. Merge that PR when the version/changelog looks right.
 5. The release workflow publishes the new version to npm.
 
-## Token Storage
+## Config Storage
 
-By default the OAuth token is saved to:
+By default `yt-ddp` stores both the saved OAuth client config and OAuth token here:
 
 ```text
-~/.config/yt-ddp/oauth-token.json
+~/.config/yt-ddp/
 ```
 
 Override that location with:
@@ -236,7 +245,7 @@ Run the full release gate:
 bun run publish:check
 ```
 
-Copy [.env.example](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/.env.example) to `.env` for local development if you want Bun to auto-load credentials.
+Use [.env.example](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/.env.example) only for advanced local development overrides if you want Bun to auto-load credentials.
 
 ## License
 

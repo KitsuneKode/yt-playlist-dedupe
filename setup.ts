@@ -1,46 +1,34 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import {
   createInterface,
   type Interface as ReadlineInterface,
 } from "node:readline/promises";
-import { inspectOAuthSetup, readOAuthClientFile } from "./auth.js";
+import {
+  inspectOAuthSetup,
+  readOAuthClientFile,
+  savePersistedOAuthClientConfig,
+} from "./auth.js";
 
-const ENV_FILE = ".env";
-const OAUTH_KEYS = [
-  "YT_DDP_OAUTH_CLIENT_ID",
-  "YT_DDP_OAUTH_CLIENT_SECRET",
-  "YT_DDP_OAUTH_CLIENT_JSON",
-  "YT_DDP_OAUTH_CLIENT_JSON_BASE64",
-  "YT_DDP_OAUTH_CLIENT_FILE",
-  "YOUTUBE_OAUTH_CLIENT_ID",
-  "YOUTUBE_OAUTH_CLIENT_SECRET",
-  "YOUTUBE_OAUTH_CLIENT_JSON",
-  "YOUTUBE_OAUTH_CLIENT_JSON_BASE64",
-  "YOUTUBE_OAUTH_CLIENT_FILE",
-  "GOOGLE_OAUTH_CLIENT_ID",
-  "GOOGLE_OAUTH_CLIENT_SECRET",
-  "GOOGLE_OAUTH_CLIENT_JSON",
-  "GOOGLE_OAUTH_CLIENT_JSON_BASE64",
-  "GOOGLE_OAUTH_CLIENT_FILE",
-] as const;
+type PromptReader = Pick<ReadlineInterface, "question">;
 
 export async function runSetup(): Promise<void> {
-  const setupStatus = inspectOAuthSetup();
-  const suggestedFile = await findSuggestedOAuthClientFile();
-  const envPath = resolve(process.cwd(), ENV_FILE);
+  const setupStatus = await inspectOAuthSetup();
 
   console.log("yt-ddp setup");
   console.log("");
   console.log(
-    "This wizard stores your Google Desktop app OAuth credentials in a local .env file.",
+    "This wizard saves your Google Desktop app OAuth credentials into yt-ddp's local config directory.",
   );
   console.log(`OAuth token cache: ${setupStatus.tokenPath}`);
+  console.log(`OAuth client config: ${setupStatus.clientConfigPath}`);
   console.log(`Current config: ${setupStatus.source ?? "not set"}`);
 
-  if (suggestedFile) {
-    console.log(`Detected OAuth client file: ${suggestedFile}`);
+  if (setupStatus.suggestedClientFile) {
+    console.log(
+      `Detected OAuth client file: ${setupStatus.suggestedClientFile}`,
+    );
+    console.log("Press Enter to use it.");
   }
 
   console.log("");
@@ -57,9 +45,10 @@ export async function runSetup(): Promise<void> {
 
   try {
     const credentialsPath = await promptForCredentialsFile({
+      allowEmpty:
+        setupStatus.configured && setupStatus.sourceKind !== "workspace-file",
       rl,
-      suggestedFile,
-      allowEmpty: setupStatus.configured,
+      suggestedFile: setupStatus.suggestedClientFile,
     });
 
     if (!credentialsPath) {
@@ -68,16 +57,10 @@ export async function runSetup(): Promise<void> {
     }
 
     const oauthConfig = await readOAuthClientFile(credentialsPath);
-    const existingEnv = await loadOptionalFile(envPath);
-    const nextEnv = upsertOAuthEnv(existingEnv, {
-      YT_DDP_OAUTH_CLIENT_ID: oauthConfig.clientId,
-      YT_DDP_OAUTH_CLIENT_SECRET: oauthConfig.clientSecret,
-    });
-
-    await writeFile(envPath, nextEnv);
+    const savedConfigPath = await savePersistedOAuthClientConfig(oauthConfig);
 
     console.log("");
-    console.log(`Saved OAuth credentials to ${envPath}`);
+    console.log(`Saved OAuth client config to ${savedConfigPath}`);
     console.log("Next steps:");
     console.log(
       '1. Run `yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID"`',
@@ -89,61 +72,14 @@ export async function runSetup(): Promise<void> {
   }
 }
 
-export function upsertOAuthEnv(
-  existingContents: string,
-  entries: Record<string, string>,
-): string {
-  const remainingEntries = new Map(Object.entries(entries));
-  const nextLines: string[] = [];
-
-  for (const line of existingContents.split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-    if (!match) {
-      nextLines.push(line);
-      continue;
-    }
-
-    const key = match[1];
-
-    if (OAUTH_KEYS.includes(key as (typeof OAUTH_KEYS)[number])) {
-      const nextValue = remainingEntries.get(key);
-      if (nextValue !== undefined) {
-        nextLines.push(`${key}=${formatEnvValue(nextValue)}`);
-        remainingEntries.delete(key);
-      }
-      continue;
-    }
-
-    nextLines.push(line);
-  }
-
-  while (nextLines.length > 0 && nextLines.at(-1) === "") {
-    nextLines.pop();
-  }
-
-  if (nextLines.length > 0) {
-    nextLines.push("");
-  }
-
-  if (remainingEntries.size > 0) {
-    nextLines.push("# yt-ddp OAuth");
-    for (const [key, value] of remainingEntries) {
-      nextLines.push(`${key}=${formatEnvValue(value)}`);
-    }
-  }
-
-  nextLines.push("");
-  return nextLines.join("\n");
-}
-
-async function promptForCredentialsFile({
+export async function promptForCredentialsFile({
+  allowEmpty,
   rl,
   suggestedFile,
-  allowEmpty,
 }: {
-  rl: ReadlineInterface;
-  suggestedFile: string | null;
   allowEmpty: boolean;
+  rl: PromptReader;
+  suggestedFile: string | null;
 }): Promise<string | null> {
   while (true) {
     const prompt = suggestedFile
@@ -191,35 +127,6 @@ async function promptForCredentialsFile({
   }
 }
 
-async function findSuggestedOAuthClientFile(): Promise<string | null> {
-  try {
-    const entries = await readdir(process.cwd(), { withFileTypes: true });
-    const match = entries.find(
-      (entry) =>
-        entry.isFile() &&
-        /^(oauth-client.*|client_secret.*|credentials.*)\.json$/i.test(
-          entry.name,
-        ),
-    );
-
-    return match ? resolve(process.cwd(), match.name) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function loadOptionalFile(filePath: string): Promise<string> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return "";
-    }
-
-    throw error;
-  }
-}
-
 function resolveUserPath(filePath: string): string {
   if (filePath === "~") {
     return homedir();
@@ -230,8 +137,4 @@ function resolveUserPath(filePath: string): string {
   }
 
   return resolve(filePath);
-}
-
-function formatEnvValue(value: string): string {
-  return /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : JSON.stringify(value);
 }

@@ -67,7 +67,7 @@ export async function main(): Promise<void> {
   }
 
   printRunHeader(cli);
-  console.log("Scanning playlist items...");
+  console.log("Checking OAuth configuration...");
   console.log("");
 
   const authClient = await getAuthenticatedClient({
@@ -75,6 +75,9 @@ export async function main(): Promise<void> {
     logger: console,
   });
   const youtube = createYouTubeClient(authClient);
+
+  console.log("Scanning playlist items...");
+  console.log("");
 
   const playlistItems = await safelyListPlaylistItems(youtube, cli.playlistId);
   const { duplicates, itemsWithoutVideoId, uniqueVideoCount } =
@@ -299,7 +302,9 @@ function printUsage(): void {
   );
   console.log("");
   console.log("Commands:");
-  console.log("  setup       Save Google Desktop OAuth credentials into .env");
+  console.log(
+    "  setup       Save Google Desktop OAuth credentials into local app config",
+  );
   console.log(
     "  scan        Explicit scan command. This is also the default action.",
   );
