@@ -17,7 +17,7 @@ This project is a high-performance **Turborepo** monorepo using **Bun**. It cons
 - **Commit Standards:** Husky + Commitlint + lint-staged are active. Ensure conventional commit messages are used.
 
 ## Design System (UI/UX Pro Max)
-- **Extension:** Uses Shadcn UI. Stick to the refined dark mode utility aesthetic. Maintain 8dp spacing rhythms and use semantic colors.
+- **Extension:** Uses Shadcn UI and GSAP for animations. Stick to the refined dark mode utility aesthetic. Maintain 8dp spacing rhythms and use semantic colors.
 - **Web App:** Uses raw Tailwind with custom Brutalist overrides in `globals.css` (e.g., thick borders, SVG noise). Use GSAP for all scroll and entrance animations. Do NOT introduce generic component libraries here; it must remain highly custom and impactful.
 
 ## How to Continue Work

@@ -34,6 +34,7 @@ context_pressure: high
 ## Decisions
 
 - **Oxc over Biome:** Decided to use Oxc as it provides unmatched linting and formatting speed in a monorepo setup.
+- **GSAP over Framer Motion:** Replaced Framer Motion with GSAP in the browser extension to match the Web App's animation stack and respect the user's explicit preference for GSAP.
 - **Dynamic Manifest V3:** Chose a dynamic `manifest.config.ts` for the extension to cleanly support Firefox's specific ID requirements without maintaining two separate repositories or branches.
 - **Next.js App Router:** Picked Next.js over TanStack Start to guarantee the absolute highest tier of SSR SEO performance for the marketing site.
 
