@@ -4,6 +4,8 @@
 
 It is dry-run by default, accepts either a playlist ID or full YouTube URL, includes a guided OAuth setup flow, and is packaged for npm as `@kitsunekode/yt-ddp`.
 
+See [CHANGELOG.md](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/CHANGELOG.md) for release notes.
+
 ## Install
 
 Global install:
@@ -15,7 +17,7 @@ npm install -g @kitsunekode/yt-ddp
 Run once without installing:
 
 ```bash
-npx @kitsunekode/yt-ddp --help
+bunx @kitsunekode/yt-ddp --help
 ```
 
 Local development:
@@ -51,6 +53,7 @@ bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 - Deletes duplicates only when you explicitly opt in
 - Stores refreshed OAuth tokens locally so re-auth is not needed every run
 - Retries transient delete failures
+- Deletes duplicate items sequentially with bounded retries to avoid unnecessary rate-limit pressure
 
 ## Safety
 
@@ -63,14 +66,17 @@ bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 ## Commands
 
 - `yt-ddp setup`
+- `yt-ddp login`
 - `yt-ddp <playlist-id-or-url>`
 - `yt-ddp scan --playlist <playlist-id-or-url>`
+- `yt-ddp completion zsh`
 
 Useful flags:
 
 - `--playlist` for explicit input
 - `--execute` to delete duplicates
 - `--yes` to skip the final prompt
+- `--json` for machine-readable output
 - `--help` to print usage
 
 ## OAuth Setup
@@ -104,6 +110,8 @@ Other supported env options:
 
 Legacy `YOUTUBE_*` and `YT_PLAYLIST_DEDUPE_*` env vars are still accepted.
 
+Need a walkthrough for the Google Cloud side? See [docs/google-oauth-setup.md](/home/kitsunekode/Projects/cli-tools/yt-playlist-dedupe/docs/google-oauth-setup.md).
+
 ## Usage Examples
 
 Dry run:
@@ -135,6 +143,31 @@ Non-interactive execute:
 ```bash
 yt-ddp PLAYLIST_ID --execute --yes
 ```
+
+JSON output:
+
+```bash
+yt-ddp PLAYLIST_ID --json
+```
+
+Zsh completion:
+
+```bash
+mkdir -p ~/.zfunc
+yt-ddp completion zsh > ~/.zfunc/_yt-ddp
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+## Privacy
+
+`yt-ddp` is designed to run locally. In the normal CLI flow there is no hosted `yt-ddp` backend that receives your playlist data.
+
+- your OAuth token is stored locally on your machine
+- your playlist scan happens locally on your machine
+- your downloaded OAuth client JSON stays local unless you share it
+
+Google still handles the sign-in and API authorization, but the tool itself is meant to be a local utility.
 
 ## Local Global Linking
 
@@ -179,7 +212,7 @@ Recommended release flow:
 bun run changeset
 bun run version-packages
 bun run publish:check
-npm publish --access public
+bun publish --access public
 ```
 
 If you want Changesets to publish directly:
@@ -194,7 +227,7 @@ bun run release
 - `bun run lint` runs Biome lint rules
 - `bun run check` runs Biome checks, typecheck, and tests
 - `bun run build` creates the publishable `dist/` output
-- `bun run smoke:built` verifies the built CLI runs under Node
+- `bun run smoke:built` verifies the built CLI runs
 - `bun run pack:dry-run` shows exactly what npm would publish
 - `bun run publish:check` runs the full prepublish gate
 

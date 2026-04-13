@@ -326,7 +326,7 @@ function handleOAuthCallback({
       response.end(
         "Authorization failed. You can close this tab and return to the terminal.",
       );
-      rejectCodePromise(new Error(`Authorization failed: ${authError}`));
+      rejectCodePromise(new Error(describeOAuthAuthorizationError(authError)));
       return;
     }
 
@@ -731,10 +731,21 @@ function getFirstDefinedEnvValue(
 
 function createMissingOAuthConfigError(workspaceDir: string): Error {
   return new Error(
-    `No OAuth client found. Run \`yt-ddp setup\`, or place your downloaded Desktop app OAuth JSON in ${workspaceDir}. Advanced options: set YT_DDP_OAUTH_CLIENT_ID and YT_DDP_OAUTH_CLIENT_SECRET, YT_DDP_OAUTH_CLIENT_JSON_BASE64, or YT_DDP_OAUTH_CLIENT_FILE.`,
+    `No OAuth client found. Run \`yt-ddp setup\`, or place your downloaded Desktop app OAuth JSON in ${workspaceDir}. If you already downloaded it there, \`yt-ddp setup\` can detect it and pressing Enter will use it. Advanced options: set YT_DDP_OAUTH_CLIENT_ID and YT_DDP_OAUTH_CLIENT_SECRET, YT_DDP_OAUTH_CLIENT_JSON_BASE64, or YT_DDP_OAUTH_CLIENT_FILE.`,
   );
 }
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function describeOAuthAuthorizationError(authError: string): string {
+  if (authError === "access_denied") {
+    return [
+      "Google authorization was denied or blocked.",
+      "If Google says the app is still being tested, add your Google account as a test user in the OAuth consent screen, or use your own Desktop app OAuth client JSON with `yt-ddp setup`.",
+    ].join(" ");
+  }
+
+  return `Authorization failed: ${authError}`;
 }

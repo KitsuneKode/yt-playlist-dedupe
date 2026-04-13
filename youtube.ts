@@ -5,6 +5,8 @@ import type { Logger, OAuthClient } from "./auth.js";
 export const YOUTUBE_SCOPE =
   "https://www.googleapis.com/auth/youtube.force-ssl";
 const PLAYLIST_PAGE_SIZE = 50;
+const MAX_API_ATTEMPTS = 4;
+const BASE_RETRY_DELAY_MS = 750;
 
 export interface PlaylistItemSummary {
   playlistItemId: string;
@@ -14,10 +16,16 @@ export interface PlaylistItemSummary {
   position: number;
 }
 
+export interface PlaylistListProgress {
+  itemsFetched: number;
+  pageCount: number;
+}
+
 interface ErrorLike {
   code?: unknown;
   message?: unknown;
   response?: {
+    headers?: Record<string, unknown>;
     status?: unknown;
     data?: {
       error?: {
@@ -43,24 +51,36 @@ export function createYouTubeClient(auth: OAuthClient): youtube_v3.Youtube {
 }
 
 export async function listPlaylistItems({
+  logger,
+  onProgress,
   youtube,
   playlistId,
 }: {
+  logger?: Pick<Logger, "warn">;
+  onProgress?: (progress: PlaylistListProgress) => void;
   youtube: youtube_v3.Youtube;
   playlistId: string;
 }): Promise<PlaylistItemSummary[]> {
   const items: PlaylistItemSummary[] = [];
   let nextPageToken: string | undefined;
+  let pageCount = 0;
 
   do {
-    const response = await youtube.playlistItems.list({
-      part: ["snippet"],
-      playlistId,
-      maxResults: PLAYLIST_PAGE_SIZE,
-      pageToken: nextPageToken,
-      fields:
-        "nextPageToken,items(id,snippet(title,position,playlistId,resourceId/videoId))",
-    });
+    const response = await withRetry(
+      {
+        actionLabel: `fetch playlist page ${pageCount + 1}`,
+        logger,
+      },
+      () =>
+        youtube.playlistItems.list({
+          part: ["snippet"],
+          playlistId,
+          maxResults: PLAYLIST_PAGE_SIZE,
+          pageToken: nextPageToken,
+          fields:
+            "nextPageToken,items(id,snippet(title,position,playlistId,resourceId/videoId))",
+        }),
+    );
 
     for (const rawItem of response.data.items ?? []) {
       const snippet = rawItem.snippet;
@@ -88,6 +108,12 @@ export async function listPlaylistItems({
       });
     }
 
+    pageCount += 1;
+    onProgress?.({
+      itemsFetched: items.length,
+      pageCount,
+    });
+
     nextPageToken = response.data.nextPageToken ?? undefined;
   } while (nextPageToken);
 
@@ -98,8 +124,8 @@ export async function deletePlaylistItemWithRetry({
   youtube,
   playlistItemId,
   logger,
-  maxAttempts = 5,
-  baseDelayMs = 500,
+  maxAttempts = MAX_API_ATTEMPTS,
+  baseDelayMs = BASE_RETRY_DELAY_MS,
 }: {
   youtube: youtube_v3.Youtube;
   playlistItemId: string;
@@ -107,29 +133,15 @@ export async function deletePlaylistItemWithRetry({
   maxAttempts?: number;
   baseDelayMs?: number;
 }): Promise<void> {
-  let lastError: unknown;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      await youtube.playlistItems.delete({ id: playlistItemId });
-      return;
-    } catch (error) {
-      lastError = error;
-
-      if (!isRetryableApiError(error) || attempt === maxAttempts) {
-        break;
-      }
-
-      const backoffMs = Math.min(baseDelayMs * 2 ** (attempt - 1), 8_000);
-      const jitterMs = Math.floor(Math.random() * 250);
-      logger?.warn(
-        `Transient delete failure for playlist item ${playlistItemId}. Retrying in ${backoffMs + jitterMs}ms.`,
-      );
-      await sleep(backoffMs + jitterMs);
-    }
-  }
-
-  throw lastError;
+  await withRetry(
+    {
+      actionLabel: `delete playlist item ${playlistItemId}`,
+      baseDelayMs,
+      logger,
+      maxAttempts,
+    },
+    () => youtube.playlistItems.delete({ id: playlistItemId }),
+  );
 }
 
 export function isRetryableApiError(error: unknown): boolean {
@@ -141,12 +153,7 @@ export function isRetryableApiError(error: unknown): boolean {
     return true;
   }
 
-  if (
-    reason !== null &&
-    ["backendError", "rateLimitExceeded", "userRateLimitExceeded"].includes(
-      reason,
-    )
-  ) {
+  if (reason !== null && ["backendError"].includes(reason)) {
     return true;
   }
 
@@ -159,6 +166,30 @@ export function isRetryableApiError(error: unknown): boolean {
       "EAI_AGAIN",
       "UND_ERR_CONNECT_TIMEOUT",
     ].includes(code)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function shouldAbortRemainingDeletions(error: unknown): boolean {
+  const status = getStatusCode(error);
+  const reason = getErrorReason(error);
+
+  if (status === 401) {
+    return true;
+  }
+
+  if (
+    reason !== null &&
+    [
+      "playlistItemsNotAccessible",
+      "quotaExceeded",
+      "rateLimitExceeded",
+      "userRateLimitExceeded",
+      "playlistOperationUnsupported",
+    ].includes(reason)
   ) {
     return true;
   }
@@ -251,4 +282,82 @@ function getErrorLike(error: unknown): ErrorLike {
   return typeof error === "object" && error !== null
     ? (error as ErrorLike)
     : {};
+}
+
+async function withRetry<T>(
+  {
+    actionLabel,
+    baseDelayMs = BASE_RETRY_DELAY_MS,
+    logger,
+    maxAttempts = MAX_API_ATTEMPTS,
+  }: {
+    actionLabel: string;
+    baseDelayMs?: number;
+    logger?: Pick<Logger, "warn">;
+    maxAttempts?: number;
+  },
+  execute: () => Promise<T>,
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await execute();
+    } catch (error) {
+      lastError = error;
+
+      if (!isRetryableApiError(error) || attempt === maxAttempts) {
+        break;
+      }
+
+      const retryDelayMs = getRetryDelayMs(error, baseDelayMs, attempt);
+      logger?.warn(
+        `Transient failure while trying to ${actionLabel}. Retrying in ${retryDelayMs}ms.`,
+      );
+      await sleep(retryDelayMs);
+    }
+  }
+
+  throw lastError;
+}
+
+function getRetryDelayMs(
+  error: unknown,
+  baseDelayMs: number,
+  attempt: number,
+): number {
+  const retryAfterMs = getRetryAfterMs(error);
+  if (retryAfterMs !== null) {
+    return retryAfterMs;
+  }
+
+  const backoffMs = Math.min(baseDelayMs * 2 ** (attempt - 1), 8_000);
+  const jitterMs = Math.floor(Math.random() * 250);
+  return backoffMs + jitterMs;
+}
+
+function getRetryAfterMs(error: unknown): number | null {
+  const retryAfterHeader =
+    getErrorLike(error).response?.headers?.["retry-after"];
+
+  if (
+    typeof retryAfterHeader === "number" &&
+    Number.isFinite(retryAfterHeader)
+  ) {
+    return retryAfterHeader * 1000;
+  }
+
+  if (typeof retryAfterHeader === "string") {
+    const numericRetryAfter = Number(retryAfterHeader);
+    if (Number.isFinite(numericRetryAfter)) {
+      return numericRetryAfter * 1000;
+    }
+
+    const retryAt = Date.parse(retryAfterHeader);
+    if (!Number.isNaN(retryAt)) {
+      return Math.max(retryAt - Date.now(), 0);
+    }
+  }
+
+  return null;
 }

@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { formatApiError, isRetryableApiError } from "./youtube.js";
+import {
+  formatApiError,
+  isRetryableApiError,
+  shouldAbortRemainingDeletions,
+} from "./youtube.js";
 
 test("isRetryableApiError returns true for transient rate limit errors", () => {
   expect(
@@ -46,4 +50,19 @@ test("formatApiError maps quota errors", () => {
       },
     }),
   ).toBe("The YouTube Data API quota or rate limit was exceeded.");
+});
+
+test("shouldAbortRemainingDeletions stops on quota-style failures", () => {
+  expect(
+    shouldAbortRemainingDeletions({
+      response: {
+        status: 403,
+        data: {
+          error: {
+            errors: [{ reason: "quotaExceeded" }],
+          },
+        },
+      },
+    }),
+  ).toBe(true);
 });

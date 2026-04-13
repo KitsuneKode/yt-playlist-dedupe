@@ -4,8 +4,10 @@ import { parseArgs } from "./index.js";
 test("parseArgs defaults to dry-run mode", () => {
   expect(parseArgs(["PLabc123"])).toEqual({
     command: "scan",
+    completionShell: null,
     help: false,
     execute: false,
+    outputJson: false,
     yes: false,
     playlistId: "PLabc123",
     playlistInput: "PLabc123",
@@ -16,8 +18,10 @@ test("parseArgs defaults to dry-run mode", () => {
 test("parseArgs enables execute mode explicitly", () => {
   expect(parseArgs(["PLabc123", "--execute"])).toEqual({
     command: "scan",
+    completionShell: null,
     help: false,
     execute: true,
+    outputJson: false,
     yes: false,
     playlistId: "PLabc123",
     playlistInput: "PLabc123",
@@ -36,8 +40,10 @@ test("parseArgs accepts playlist URLs", () => {
     parseArgs(["https://www.youtube.com/watch?v=abc123&list=PLabc123"]),
   ).toEqual({
     command: "scan",
+    completionShell: null,
     help: false,
     execute: false,
+    outputJson: false,
     yes: false,
     playlistId: "PLabc123",
     playlistInput: "https://www.youtube.com/watch?v=abc123&list=PLabc123",
@@ -48,8 +54,10 @@ test("parseArgs accepts playlist URLs", () => {
 test("parseArgs accepts --playlist", () => {
   expect(parseArgs(["scan", "--playlist", "PLabc123"])).toEqual({
     command: "scan",
+    completionShell: null,
     help: false,
     execute: false,
+    outputJson: false,
     yes: false,
     playlistId: "PLabc123",
     playlistInput: "PLabc123",
@@ -66,8 +74,52 @@ test("parseArgs rejects --yes without execute", () => {
 test("parseArgs recognizes setup command", () => {
   expect(parseArgs(["setup"])).toEqual({
     command: "setup",
+    completionShell: null,
     help: false,
     execute: false,
+    outputJson: false,
+    yes: false,
+    playlistId: null,
+    playlistInput: null,
+    playlistInputKind: null,
+  });
+});
+
+test("parseArgs recognizes login as a setup alias", () => {
+  expect(parseArgs(["login"])).toEqual({
+    command: "login",
+    completionShell: null,
+    help: false,
+    execute: false,
+    outputJson: false,
+    yes: false,
+    playlistId: null,
+    playlistInput: null,
+    playlistInputKind: null,
+  });
+});
+
+test("parseArgs enables json output for scans", () => {
+  expect(parseArgs(["PLabc123", "--json"])).toEqual({
+    command: "scan",
+    completionShell: null,
+    help: false,
+    execute: false,
+    outputJson: true,
+    yes: false,
+    playlistId: "PLabc123",
+    playlistInput: "PLabc123",
+    playlistInputKind: "id",
+  });
+});
+
+test("parseArgs supports zsh completion command", () => {
+  expect(parseArgs(["completion", "zsh"])).toEqual({
+    command: "completion",
+    completionShell: "zsh",
+    help: false,
+    execute: false,
+    outputJson: false,
     yes: false,
     playlistId: null,
     playlistInput: null,
