@@ -53,7 +53,7 @@ bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 - Deletes duplicates only when you explicitly opt in
 - Stores refreshed OAuth tokens locally so re-auth is not needed every run
 - Retries transient delete failures
-- Deletes duplicate items sequentially with bounded retries to avoid unnecessary rate-limit pressure
+- Deletes duplicate items with small bounded parallelism, per-item retries, and circuit breaking for quota or rate-limit failures
 
 ## Safety
 

@@ -22,7 +22,9 @@ import {
   YOUTUBE_SCOPE,
 } from "./youtube.js";
 
-const INTER_DELETE_DELAY_MS = 200;
+const MAX_CONCURRENT_DELETES = 4;
+const INTER_DELETE_START_DELAY_MS = 125;
+const MAX_CONSECUTIVE_DELETE_FAILURES = 3;
 const ANSI_RESET = "\x1b[0m";
 const CLEAR_LINE = "\x1b[2K";
 const PROGRESS_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -84,19 +86,26 @@ interface ScanReport {
   uniqueVideoCount: number;
 }
 
-interface DeletionFailure {
+export interface DeletionFailure {
   duplicateIndex: number;
   message: string;
   playlistItemId: string;
   title: string;
 }
 
-interface DeletionReport {
+export interface DeletionReport {
   aborted: boolean;
   abortedReason: string | null;
   deletedCount: number;
   failed: DeletionFailure[];
   skippedCount: number;
+}
+
+type DeletePlaylistItemFn = (playlistItemId: string) => Promise<void>;
+
+interface DeleteDuplicatesDependencies {
+  deletePlaylistItem?: DeletePlaylistItemFn;
+  wait?: (ms: number) => Promise<void>;
 }
 
 class Spinner {
@@ -662,68 +671,163 @@ function printScanSummary(report: ScanReport): void {
   }
 }
 
-async function deleteDuplicates({
+export async function deleteDuplicates({
   duplicates,
   outputJson,
   youtube,
+  deletePlaylistItem,
+  wait = sleep,
 }: {
   duplicates: DuplicatePlaylistItem[];
   outputJson: boolean;
   youtube: ReturnType<typeof createYouTubeClient>;
-}): Promise<DeletionReport> {
+} & DeleteDuplicatesDependencies): Promise<DeletionReport> {
   const failures: DeletionFailure[] = [];
+  const deleteItem =
+    deletePlaylistItem ??
+    ((playlistItemId: string) =>
+      deletePlaylistItemWithRetry({
+        logger: console,
+        playlistItemId,
+        youtube,
+      }));
+  const workerCount = Math.min(MAX_CONCURRENT_DELETES, duplicates.length);
   let aborted = false;
   let abortedReason: string | null = null;
+  let completedCount = 0;
   let consecutiveFailures = 0;
   let deletedCount = 0;
+  let inFlightCount = 0;
+  let nextDeleteStartAt = Date.now();
+  let nextIndex = 0;
 
-  for (const [index, duplicate] of duplicates.entries()) {
-    if (!outputJson) {
+  const stopScheduling = (reason: string): void => {
+    if (aborted) {
+      return;
+    }
+
+    aborted = true;
+    abortedReason = reason;
+  };
+
+  const reserveNextDeletion = (): {
+    duplicate: DuplicatePlaylistItem;
+    index: number;
+    waitMs: number;
+  } | null => {
+    if (aborted || nextIndex >= duplicates.length) {
+      return null;
+    }
+
+    const index = nextIndex;
+    const duplicate = duplicates[index];
+    nextIndex += 1;
+
+    const now = Date.now();
+    const scheduledAt = Math.max(nextDeleteStartAt, now);
+    nextDeleteStartAt = scheduledAt + INTER_DELETE_START_DELAY_MS;
+
+    return {
+      duplicate,
+      index,
+      waitMs: scheduledAt - now,
+    };
+  };
+
+  const logDeleteStart = (
+    duplicate: DuplicatePlaylistItem,
+    index: number,
+    activeCount: number,
+  ): void => {
+    if (outputJson) {
+      return;
+    }
+
+    console.log(
+      `${style.accent("Delete")} ${index + 1}/${duplicates.length}: #${duplicate.duplicateIndex} ${duplicate.title} ${style.muted(`(active ${activeCount})`)}`,
+    );
+  };
+
+  const logDeleteResult = (
+    duplicate: DuplicatePlaylistItem,
+    outcome: { kind: "failure"; message: string } | { kind: "success" },
+  ): void => {
+    if (outputJson) {
+      return;
+    }
+
+    const progress = style.muted(
+      `(${completedCount}/${duplicates.length} finished, ${duplicates.length - completedCount} remaining)`,
+    );
+
+    if (outcome.kind === "success") {
       console.log(
-        `${style.accent("Delete")} ${index + 1}/${duplicates.length}: #${duplicate.duplicateIndex} ${duplicate.title}`,
+        `  ${style.ok("Done")} #${duplicate.duplicateIndex}: ${duplicate.title} ${progress}`,
       );
+      return;
     }
 
-    try {
-      await deletePlaylistItemWithRetry({
-        logger: console,
-        playlistItemId: duplicate.playlistItemId,
-        youtube,
-      });
-      deletedCount += 1;
-      consecutiveFailures = 0;
-    } catch (error) {
-      const message = formatApiError(error);
-      failures.push({
-        duplicateIndex: duplicate.duplicateIndex,
-        message,
-        playlistItemId: duplicate.playlistItemId,
-        title: duplicate.title,
-      });
-      consecutiveFailures += 1;
+    console.log(
+      `  ${style.warn("Skipped")} #${duplicate.duplicateIndex}: ${outcome.message} ${progress}`,
+    );
+  };
 
-      if (!outputJson) {
-        console.log(
-          `  ${style.warn("Skipped")} #${duplicate.duplicateIndex}: ${message}`,
-        );
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const reservation = reserveNextDeletion();
+      if (!reservation) {
+        return;
       }
 
-      if (shouldAbortRemainingDeletions(error)) {
-        aborted = true;
-        abortedReason = message;
-        break;
+      if (reservation.waitMs > 0) {
+        await wait(reservation.waitMs);
       }
 
-      if (consecutiveFailures >= 3) {
-        aborted = true;
-        abortedReason =
-          "Stopped after 3 consecutive delete failures to avoid making a bad situation worse.";
-        break;
+      if (aborted) {
+        return;
+      }
+
+      const { duplicate, index } = reservation;
+      let outcome: { kind: "failure"; message: string } | { kind: "success" } =
+        { kind: "success" };
+
+      inFlightCount += 1;
+      logDeleteStart(duplicate, index, inFlightCount);
+
+      try {
+        await deleteItem(duplicate.playlistItemId);
+        deletedCount += 1;
+        consecutiveFailures = 0;
+      } catch (error) {
+        const message = formatApiError(error);
+        failures.push({
+          duplicateIndex: duplicate.duplicateIndex,
+          message,
+          playlistItemId: duplicate.playlistItemId,
+          title: duplicate.title,
+        });
+        consecutiveFailures += 1;
+        outcome = {
+          kind: "failure",
+          message,
+        };
+
+        if (shouldAbortRemainingDeletions(error)) {
+          stopScheduling(message);
+        } else if (consecutiveFailures >= MAX_CONSECUTIVE_DELETE_FAILURES) {
+          stopScheduling(
+            `Stopped after ${MAX_CONSECUTIVE_DELETE_FAILURES} consecutive delete failures to avoid making a bad situation worse.`,
+          );
+        }
+      } finally {
+        inFlightCount -= 1;
+        completedCount += 1;
+        logDeleteResult(duplicate, outcome);
       }
     }
+  };
 
-    await sleep(INTER_DELETE_DELAY_MS);
-  }
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   return {
     aborted,
