@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  findDuplicateVideos,
-  getProtectedPlaylistName,
-  isProtectedPlaylistId,
-} from "./dedupe.js";
+import { findDuplicateVideos, getProtectedPlaylistName, isProtectedPlaylistId } from "./dedupe.js";
 
 test("findDuplicateVideos keeps the first occurrence only", () => {
   const result = findDuplicateVideos([
