@@ -52,6 +52,8 @@ bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 - Keeps the first occurrence of each video
 - Deletes duplicates only when you explicitly opt in
 - Stores refreshed OAuth tokens locally so re-auth is not needed every run
+- Reuses recent dry-run playlist scans from a local cache to avoid unnecessary read calls
+- Tracks local estimated quota usage and cache savings with a `quota` command
 - Retries transient delete failures
 - Deletes duplicate items with small bounded parallelism, per-item retries, and circuit breaking for quota or rate-limit failures
 
@@ -67,6 +69,7 @@ bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 
 - `yt-ddp setup`
 - `yt-ddp login`
+- `yt-ddp quota`
 - `yt-ddp <playlist-id-or-url>`
 - `yt-ddp scan --playlist <playlist-id-or-url>`
 - `yt-ddp completion zsh`
@@ -74,6 +77,7 @@ bun run start -- "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 Useful flags:
 
 - `--playlist` for explicit input
+- `--refresh` to bypass the local dry-run cache and fetch live data
 - `--execute` to delete duplicates
 - `--yes` to skip the final prompt
 - `--json` for machine-readable output
@@ -107,6 +111,7 @@ Other supported env options:
 - `YT_DDP_OAUTH_CLIENT_JSON_BASE64`
 - `YT_DDP_OAUTH_CLIENT_FILE`
 - `YT_DDP_CONFIG_DIR`
+- `YT_DDP_PLAYLIST_CACHE_TTL_MINUTES`
 
 Legacy `YOUTUBE_*` and `YT_PLAYLIST_DEDUPE_*` env vars are still accepted.
 
@@ -150,6 +155,18 @@ JSON output:
 yt-ddp PLAYLIST_ID --json
 ```
 
+View local cache and estimated quota usage:
+
+```bash
+yt-ddp quota
+```
+
+Force a fresh scan instead of using a recent cached dry-run result:
+
+```bash
+yt-ddp PLAYLIST_ID --refresh
+```
+
 Zsh completion:
 
 ```bash
@@ -166,6 +183,7 @@ autoload -Uz compinit && compinit
 - your OAuth token is stored locally on your machine
 - your playlist scan happens locally on your machine
 - your downloaded OAuth client JSON stays local unless you share it
+- your cached playlist scan metadata and local quota estimates stay local too
 
 Google still handles the sign-in and API authorization, but the tool itself is meant to be a local utility.
 
@@ -252,11 +270,15 @@ Expected release behavior:
 
 ## Config Storage
 
-By default `yt-ddp` stores both the saved OAuth client config and OAuth token here:
+By default `yt-ddp` stores its saved OAuth client config, OAuth token, local scan cache, and local quota ledger here:
 
 ```text
 ~/.config/yt-ddp/
 ```
+
+Dry-run scans may reuse cached playlist results from this directory for about 15 minutes by default. Deletion runs always fetch live data first and invalidate the cache afterward so destructive actions do not rely on stale scan data.
+
+If you want the authoritative quota view for your Google Cloud project, use the Google Cloud Console quota page or Cloud Monitoring. `yt-ddp quota` reports a local estimate based on what this CLI has done on your machine.
 
 Override that location with:
 

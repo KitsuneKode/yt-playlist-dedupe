@@ -37,6 +37,8 @@ oauth-token.json
 .eslintcache
 .cache
 *.tsbuildinfo
+.turbo
+.next
 
 # IntelliJ based IDEs
 .idea
