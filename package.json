@@ -9,7 +9,7 @@
     "dev": "turbo run dev --ui=tui",
     "dev:firefox": "turbo run dev:firefox --ui=tui",
     "build": "turbo run build --ui=tui",
-    "clean": "turbo run clean && bun --eval 'await Bun.$`rm -rf node_modules .turbo .next apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/out apps/web/.next packages/*/dist packages/*/out` '",
+    "clean": "turbo run clean && bun run scripts/clean.ts",
     "test": "turbo run test --ui=tui",
     "lint": "oxlint .",
     "format": "oxfmt .",
