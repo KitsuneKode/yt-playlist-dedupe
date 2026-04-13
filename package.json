@@ -6,12 +6,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "test": "turbo run test",
+    "dev": "turbo run dev --ui=tui",
+    "build": "turbo run build --ui=tui",
+    "test": "turbo run test --ui=tui",
     "lint": "oxlint .",
     "format": "oxfmt .",
-    "check": "turbo run check",
+    "check": "turbo run check --ui=tui",
     "prepare": "husky"
   },
   "devDependencies": {

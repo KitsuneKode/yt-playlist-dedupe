@@ -8,7 +8,7 @@ This project is a high-performance **Turborepo** monorepo using **Bun**. It cons
 - **`apps/web`**: A Next.js 15 App Router landing page showcasing the product, styled with a Brutalism Retro Premium aesthetic, highly optimized for SEO.
 
 ## Core Tooling & Best Practices
-- **Task Runner:** Turborepo (`turbo`). Run global tasks from the root: `bun run build`, `bun run dev`, `bun run check`.
+- **Task Runner:** Turborepo (`turbo`). Run global tasks from the root: `bun run build`, `bun run dev`, `bun run check`. The scripts are configured to use Turborepo's Terminal UI (`--ui=tui`) for clean, interactive logs.
 - **Package Manager:** Bun (`bun install`, `bun add`). Do NOT use `npm` or `yarn`.
 - **Linting & Formatting:** Oxc (`oxlint` and `oxfmt`). Do NOT use Biome. Run `bun run check` to execute `oxlint`, `tsc`, and `bun test` concurrently across all packages.
 - **Testing:** 

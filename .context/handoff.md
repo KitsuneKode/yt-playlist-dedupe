@@ -15,7 +15,8 @@ context_pressure: high
 - Swapped Biome out for Oxc (`oxlint` and `oxfmt`) for extreme performance.
 - Configured Husky, lint-staged, and Commitlint.
 - Configured Playwright for E2E testing the extension.
-- Added global `dev` and `build` scripts to the root `package.json`.
+- Added global `dev`, `build`, and `check` scripts to the root `package.json`, explicitly enabling Turborepo's interactive Terminal UI (`--ui=tui`) for clean, separate logs.
+- Added individual `turbo.json` workspace files to all apps and packages for fine-grained control.
 
 ## In Progress
 
