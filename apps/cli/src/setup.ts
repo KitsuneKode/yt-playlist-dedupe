@@ -1,14 +1,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import {
-  createInterface,
-  type Interface as ReadlineInterface,
-} from "node:readline/promises";
-import {
-  inspectOAuthSetup,
-  readOAuthClientFile,
-  savePersistedOAuthClientConfig,
-} from "./auth.js";
+import { createInterface, type Interface as ReadlineInterface } from "node:readline/promises";
+import { inspectOAuthSetup, readOAuthClientFile, savePersistedOAuthClientConfig } from "./auth.js";
 
 type PromptReader = Pick<ReadlineInterface, "question">;
 
@@ -25,9 +18,7 @@ export async function runSetup(): Promise<void> {
   console.log(`Current config: ${setupStatus.source ?? "not set"}`);
 
   if (setupStatus.suggestedClientFile) {
-    console.log(
-      `Detected OAuth client file: ${setupStatus.suggestedClientFile}`,
-    );
+    console.log(`Detected OAuth client file: ${setupStatus.suggestedClientFile}`);
     console.log("Press Enter to use it.");
   }
 
@@ -45,8 +36,7 @@ export async function runSetup(): Promise<void> {
 
   try {
     const credentialsPath = await promptForCredentialsFile({
-      allowEmpty:
-        setupStatus.configured && setupStatus.sourceKind !== "workspace-file",
+      allowEmpty: setupStatus.configured && setupStatus.sourceKind !== "workspace-file",
       rl,
       suggestedFile: setupStatus.suggestedClientFile,
     });
@@ -62,9 +52,7 @@ export async function runSetup(): Promise<void> {
     console.log("");
     console.log(`Saved OAuth client config to ${savedConfigPath}`);
     console.log("Next steps:");
-    console.log(
-      '1. Run `yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID"`',
-    );
+    console.log('1. Run `yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID"`');
     console.log("2. Sign in once when the browser prompt opens.");
     console.log("3. Re-run with --execute when the dry run looks right.");
   } finally {
@@ -100,9 +88,7 @@ export async function promptForCredentialsFile({
           console.log(
             `Could not use ${suggestedFile}: ${error instanceof Error ? error.message : String(error)}`,
           );
-          console.log(
-            "Try again with the path to the downloaded Desktop app OAuth JSON.",
-          );
+          console.log("Try again with the path to the downloaded Desktop app OAuth JSON.");
           continue;
         }
       }
@@ -120,9 +106,7 @@ export async function promptForCredentialsFile({
       console.log(
         `Could not use ${resolvedPath}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      console.log(
-        "Try again with the path to the downloaded Desktop app OAuth JSON.",
-      );
+      console.log("Try again with the path to the downloaded Desktop app OAuth JSON.");
     }
   }
 }

@@ -1,11 +1,8 @@
 import { expect, test } from "bun:test";
-import type { DuplicatePlaylistItem } from "./dedupe.js";
+import type { DuplicatePlaylistItem } from "@yt-ddp/core";
 import { deleteDuplicates } from "./index.js";
 
-function makeDuplicate(
-  playlistItemId: string,
-  duplicateIndex: number,
-): DuplicatePlaylistItem {
+function makeDuplicate(playlistItemId: string, duplicateIndex: number): DuplicatePlaylistItem {
   return {
     duplicateIndex,
     firstOccurrenceIndex: 1,
@@ -34,11 +31,7 @@ function createRateLimitError(): unknown {
 }
 
 test("deleteDuplicates keeps going after a normal item failure", async () => {
-  const duplicates = [
-    makeDuplicate("a", 2),
-    makeDuplicate("b", 3),
-    makeDuplicate("c", 4),
-  ];
+  const duplicates = [makeDuplicate("a", 2), makeDuplicate("b", 3), makeDuplicate("c", 4)];
   const deletedIds: string[] = [];
 
   const report = await deleteDuplicates({
@@ -52,9 +45,7 @@ test("deleteDuplicates keeps going after a normal item failure", async () => {
     duplicates,
     outputJson: true,
     wait: async () => {},
-    youtube: {} as ReturnType<
-      typeof import("./youtube.js").createYouTubeClient
-    >,
+    youtube: {} as ReturnType<typeof import("./youtube.js").createYouTubeClient>,
   });
 
   expect(deletedIds).toEqual(["a", "c"]);
@@ -95,9 +86,7 @@ test("deleteDuplicates uses bounded parallel workers", async () => {
     duplicates,
     outputJson: true,
     wait: async () => {},
-    youtube: {} as ReturnType<
-      typeof import("./youtube.js").createYouTubeClient
-    >,
+    youtube: {} as ReturnType<typeof import("./youtube.js").createYouTubeClient>,
   });
 
   expect(maxActiveCount).toBeGreaterThan(1);
@@ -128,16 +117,12 @@ test("deleteDuplicates trips the circuit breaker on rate-limit failures", async 
     duplicates,
     outputJson: true,
     wait: async () => {},
-    youtube: {} as ReturnType<
-      typeof import("./youtube.js").createYouTubeClient
-    >,
+    youtube: {} as ReturnType<typeof import("./youtube.js").createYouTubeClient>,
   });
 
   expect(startedIds).toEqual(["a", "b", "c", "d"]);
   expect(report.aborted).toBe(true);
-  expect(report.abortedReason).toBe(
-    "The YouTube Data API quota or rate limit was exceeded.",
-  );
+  expect(report.abortedReason).toBe("The YouTube Data API quota or rate limit was exceeded.");
   expect(report.deletedCount).toBe(3);
   expect(report.failed).toEqual([
     {

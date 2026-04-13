@@ -2,22 +2,23 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { google, type youtube_v3 } from "googleapis";
 import type { Logger, OAuthClient } from "./auth.js";
 
-export const YOUTUBE_SCOPE =
-  "https://www.googleapis.com/auth/youtube.force-ssl";
+export const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl";
+export const PLAYLIST_ITEMS_LIST_QUOTA_COST = 1;
+export const PLAYLIST_ITEMS_DELETE_QUOTA_COST = 50;
 const PLAYLIST_PAGE_SIZE = 50;
 const MAX_API_ATTEMPTS = 4;
 const BASE_RETRY_DELAY_MS = 750;
 
-export interface PlaylistItemSummary {
-  playlistItemId: string;
-  playlistId: string;
-  videoId: string | null;
-  title: string;
-  position: number;
-}
+import type { PlaylistItemSummary } from "@yt-ddp/core";
 
 export interface PlaylistListProgress {
   itemsFetched: number;
+  pageCount: number;
+}
+
+export interface PlaylistListResult {
+  estimatedQuotaUnits: number;
+  items: PlaylistItemSummary[];
   pageCount: number;
 }
 
@@ -60,7 +61,7 @@ export async function listPlaylistItems({
   onProgress?: (progress: PlaylistListProgress) => void;
   youtube: youtube_v3.Youtube;
   playlistId: string;
-}): Promise<PlaylistItemSummary[]> {
+}): Promise<PlaylistListResult> {
   const items: PlaylistItemSummary[] = [];
   let nextPageToken: string | undefined;
   let pageCount = 0;
@@ -77,8 +78,7 @@ export async function listPlaylistItems({
           playlistId,
           maxResults: PLAYLIST_PAGE_SIZE,
           pageToken: nextPageToken,
-          fields:
-            "nextPageToken,items(id,snippet(title,position,playlistId,resourceId/videoId))",
+          fields: "nextPageToken,items(id,snippet(title,position,playlistId,resourceId/videoId))",
         }),
     );
 
@@ -96,8 +96,7 @@ export async function listPlaylistItems({
         );
       }
 
-      const position =
-        typeof snippet.position === "number" ? snippet.position : items.length;
+      const position = typeof snippet.position === "number" ? snippet.position : items.length;
 
       items.push({
         playlistItemId,
@@ -117,7 +116,11 @@ export async function listPlaylistItems({
     nextPageToken = response.data.nextPageToken ?? undefined;
   } while (nextPageToken);
 
-  return items;
+  return {
+    estimatedQuotaUnits: pageCount * PLAYLIST_ITEMS_LIST_QUOTA_COST,
+    items,
+    pageCount,
+  };
 }
 
 export async function deletePlaylistItemWithRetry({
@@ -159,13 +162,7 @@ export function isRetryableApiError(error: unknown): boolean {
 
   if (
     code !== null &&
-    [
-      "ECONNRESET",
-      "ENOTFOUND",
-      "ETIMEDOUT",
-      "EAI_AGAIN",
-      "UND_ERR_CONNECT_TIMEOUT",
-    ].includes(code)
+    ["ECONNRESET", "ENOTFOUND", "ETIMEDOUT", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"].includes(code)
   ) {
     return true;
   }
@@ -224,9 +221,7 @@ export function formatApiError(error: unknown): string {
 
   if (
     status === 403 &&
-    ["quotaExceeded", "rateLimitExceeded", "userRateLimitExceeded"].includes(
-      reason ?? "",
-    )
+    ["quotaExceeded", "rateLimitExceeded", "userRateLimitExceeded"].includes(reason ?? "")
   ) {
     return "The YouTube Data API quota or rate limit was exceeded.";
   }
@@ -244,17 +239,13 @@ export function formatApiError(error: unknown): string {
 
 export function getStatusCode(error: unknown): number | null {
   const errorLike = getErrorLike(error);
-  return typeof errorLike.response?.status === "number"
-    ? errorLike.response.status
-    : null;
+  return typeof errorLike.response?.status === "number" ? errorLike.response.status : null;
 }
 
 export function getErrorReason(error: unknown): string | null {
   const errorLike = getErrorLike(error);
   const reason =
-    errorLike.response?.data?.error?.errors?.[0]?.reason ??
-    errorLike.errors?.[0]?.reason ??
-    null;
+    errorLike.response?.data?.error?.errors?.[0]?.reason ?? errorLike.errors?.[0]?.reason ?? null;
 
   return typeof reason === "string" ? reason : null;
 }
@@ -267,9 +258,7 @@ function getErrorCode(error: unknown): string | null {
 function getErrorMessage(error: unknown): string {
   const errorLike = getErrorLike(error);
   const message =
-    errorLike.response?.data?.error?.message ??
-    errorLike.errors?.[0]?.message ??
-    errorLike.message;
+    errorLike.response?.data?.error?.message ?? errorLike.errors?.[0]?.message ?? errorLike.message;
 
   if (typeof message === "string" && message.length > 0) {
     return message;
@@ -279,9 +268,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 function getErrorLike(error: unknown): ErrorLike {
-  return typeof error === "object" && error !== null
-    ? (error as ErrorLike)
-    : {};
+  return typeof error === "object" && error !== null ? (error as ErrorLike) : {};
 }
 
 async function withRetry<T>(
@@ -321,11 +308,7 @@ async function withRetry<T>(
   throw lastError;
 }
 
-function getRetryDelayMs(
-  error: unknown,
-  baseDelayMs: number,
-  attempt: number,
-): number {
+function getRetryDelayMs(error: unknown, baseDelayMs: number, attempt: number): number {
   const retryAfterMs = getRetryAfterMs(error);
   if (retryAfterMs !== null) {
     return retryAfterMs;
@@ -337,13 +320,9 @@ function getRetryDelayMs(
 }
 
 function getRetryAfterMs(error: unknown): number | null {
-  const retryAfterHeader =
-    getErrorLike(error).response?.headers?.["retry-after"];
+  const retryAfterHeader = getErrorLike(error).response?.headers?.["retry-after"];
 
-  if (
-    typeof retryAfterHeader === "number" &&
-    Number.isFinite(retryAfterHeader)
-  ) {
+  if (typeof retryAfterHeader === "number" && Number.isFinite(retryAfterHeader)) {
     return retryAfterHeader * 1000;
   }
 

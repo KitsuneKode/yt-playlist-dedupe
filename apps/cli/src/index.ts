@@ -2,14 +2,23 @@
 
 import { createInterface } from "node:readline";
 import { setTimeout as sleep } from "node:timers/promises";
-import { getAuthenticatedClient, type OAuthClient } from "./auth.js";
+import { getAuthenticatedClient, type OAuthClient, resolveOAuthSource } from "./auth.js";
 import {
   type DuplicatePlaylistItem,
   findDuplicateVideos,
   getProtectedPlaylistName,
   isProtectedPlaylistId,
-} from "./dedupe.js";
+  type PlaylistItemSummary,
+} from "@yt-ddp/core";
 import { runSetup } from "./setup.js";
+import {
+  getQuotaUsageReport,
+  invalidatePlaylistScanCache,
+  QUOTA_REFERENCE,
+  readPlaylistScanCache,
+  recordQuotaEntry,
+  writePlaylistScanCache,
+} from "./usage.js";
 import {
   createYouTubeClient,
   deletePlaylistItemWithRetry,
@@ -17,7 +26,7 @@ import {
   getErrorReason,
   getStatusCode,
   listPlaylistItems,
-  type PlaylistItemSummary,
+  PLAYLIST_ITEMS_DELETE_QUOTA_COST,
   shouldAbortRemainingDeletions,
   YOUTUBE_SCOPE,
 } from "./youtube.js";
@@ -28,7 +37,7 @@ const MAX_CONSECUTIVE_DELETE_FAILURES = 3;
 const ANSI_RESET = "\x1b[0m";
 const CLEAR_LINE = "\x1b[2K";
 const PROGRESS_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const COMMANDS = new Set(["help", "scan", "setup", "login", "completion"]);
+const COMMANDS = new Set(["completion", "help", "login", "quota", "scan", "setup"]);
 const ALLOWED_FLAGS = new Set([
   "--dry-run",
   "--execute",
@@ -36,13 +45,13 @@ const ALLOWED_FLAGS = new Set([
   "--json",
   "-h",
   "--playlist",
+  "--refresh",
   "--yes",
 ] as const);
 const COLORS_ENABLED = process.env.FORCE_COLOR
   ? process.env.FORCE_COLOR !== "0"
   : !process.env.NO_COLOR && process.stdout.isTTY;
-const PROGRESS_ENABLED =
-  process.stderr.isTTY && !process.env.CI && process.env.TERM !== "dumb";
+const PROGRESS_ENABLED = process.stderr.isTTY && !process.env.CI && process.env.TERM !== "dumb";
 
 const style = {
   accent: (text: string) => colorize(text, "36"),
@@ -56,7 +65,7 @@ const style = {
 };
 
 export interface CliOptions {
-  command: "completion" | "help" | "login" | "scan" | "setup";
+  command: "completion" | "help" | "login" | "quota" | "scan" | "setup";
   completionShell: "zsh" | null;
   execute: boolean;
   help: boolean;
@@ -64,6 +73,7 @@ export interface CliOptions {
   playlistId: string | null;
   playlistInput: string | null;
   playlistInputKind: "id" | "url" | null;
+  refresh: boolean;
   yes: boolean;
 }
 
@@ -77,13 +87,27 @@ interface DuplicateGroup {
 }
 
 interface ScanReport {
+  cacheAgeMs: number | null;
   duplicateGroups: DuplicateGroup[];
   duplicateItemCount: number;
+  estimatedQuotaUnits: number;
+  estimatedQuotaUnitsSavedByCache: number;
   itemsWithoutVideoId: number;
+  pageCount: number;
   playlistCountAfterCleanup: number;
   playlistId: string;
   scannedCount: number;
+  scanSource: "cache" | "live";
   uniqueVideoCount: number;
+}
+
+interface ResolvedPlaylistScan {
+  cacheAgeMs: number | null;
+  estimatedQuotaUnits: number;
+  estimatedQuotaUnitsSavedByCache: number;
+  items: PlaylistItemSummary[];
+  pageCount: number;
+  source: "cache" | "live";
 }
 
 export interface DeletionFailure {
@@ -192,13 +216,17 @@ export async function main(): Promise<void> {
     return;
   }
 
+  if (cli.command === "quota") {
+    await printQuotaReport({ outputJson: cli.outputJson });
+    return;
+  }
+
   if (!cli.playlistId) {
     if (cli.outputJson) {
       printJson({
         error: {
           code: "missing_playlist_input",
-          message:
-            "Pass a playlist URL or playlist ID to scan, or use --playlist.",
+          message: "Pass a playlist URL or playlist ID to scan, or use --playlist.",
         },
         ok: false,
       });
@@ -213,7 +241,9 @@ export async function main(): Promise<void> {
   if (isProtectedPlaylistId(cli.playlistId)) {
     const playlistName = getProtectedPlaylistName(cli.playlistId);
     throw new Error(
-      `Refusing to operate on protected playlist ${cli.playlistId}${playlistName ? ` (${playlistName})` : ""}.`,
+      `Refusing to operate on protected playlist ${cli.playlistId}${
+        playlistName ? ` (${playlistName})` : ""
+      }.`,
     );
   }
 
@@ -221,57 +251,76 @@ export async function main(): Promise<void> {
     printRunHeader(cli);
   }
 
-  const authSpinner = new Spinner("Checking OAuth configuration...");
-  if (PROGRESS_ENABLED) {
-    authSpinner.start();
+  let youtube: ReturnType<typeof createYouTubeClient> | null = null;
+  let resolvedScan =
+    !cli.execute && !cli.refresh ? await maybeReadCachedPlaylistScan(cli.playlistId) : null;
+
+  if (!resolvedScan) {
+    const authSpinner = new Spinner("Checking OAuth configuration...");
+    if (PROGRESS_ENABLED) {
+      authSpinner.start();
+    } else if (!cli.outputJson) {
+      console.log(`${style.accent("Auth")} Checking OAuth configuration...`);
+      console.log("");
+    }
+
+    let authClient: OAuthClient;
+
+    try {
+      authClient = await getAuthenticatedClient({
+        scope: YOUTUBE_SCOPE,
+        logger: console,
+      });
+      authSpinner.succeed("OAuth ready");
+    } catch (error) {
+      authSpinner.fail("OAuth setup needs attention");
+      throw error;
+    }
+
+    youtube = createYouTubeClient(authClient);
+    const scanSpinner = new Spinner("Reading playlist items...");
+    if (PROGRESS_ENABLED) {
+      scanSpinner.start();
+    } else if (!cli.outputJson) {
+      console.log(`${style.accent("Scan")} Reading playlist items...`);
+      console.log("");
+    }
+
+    try {
+      resolvedScan = await safelyListPlaylistItems({
+        playlistId: cli.playlistId,
+        saveToCache: !cli.execute,
+        spinner: scanSpinner,
+        youtube,
+      });
+      scanSpinner.succeed(`Loaded ${resolvedScan.items.length} playlist items`);
+    } catch (error) {
+      scanSpinner.fail("Playlist scan stopped");
+      throw error;
+    }
   } else if (!cli.outputJson) {
-    console.log(`${style.accent("Auth")} Checking OAuth configuration...`);
-    console.log("");
-  }
-
-  let authClient: OAuthClient;
-
-  try {
-    authClient = await getAuthenticatedClient({
-      scope: YOUTUBE_SCOPE,
-      logger: console,
-    });
-    authSpinner.succeed("OAuth ready");
-  } catch (error) {
-    authSpinner.fail("OAuth setup needs attention");
-    throw error;
-  }
-
-  const youtube = createYouTubeClient(authClient);
-  const scanSpinner = new Spinner("Reading playlist items...");
-  if (PROGRESS_ENABLED) {
-    scanSpinner.start();
-  } else if (!cli.outputJson) {
-    console.log(`${style.accent("Scan")} Reading playlist items...`);
-    console.log("");
-  }
-
-  let playlistItems: PlaylistItemSummary[];
-
-  try {
-    playlistItems = await safelyListPlaylistItems(
-      youtube,
-      cli.playlistId,
-      scanSpinner,
+    console.log(
+      `${style.accent("Cache")} Reused a cached scan from ${formatDuration(
+        resolvedScan.cacheAgeMs ?? 0,
+      )} ago.`,
     );
-    scanSpinner.succeed(`Loaded ${playlistItems.length} playlist items`);
-  } catch (error) {
-    scanSpinner.fail("Playlist scan stopped");
-    throw error;
+    console.log(style.dim("Use --refresh to force a live scan if the playlist may have changed."));
+    console.log("");
   }
 
-  const { duplicates, itemsWithoutVideoId, uniqueVideoCount } =
-    findDuplicateVideos(playlistItems);
+  const playlistItems = resolvedScan.items;
+
+  const { duplicates, itemsWithoutVideoId, uniqueVideoCount } = findDuplicateVideos(playlistItems);
   const scanReport = createScanReport({
+    cacheAgeMs: resolvedScan.cacheAgeMs,
     duplicates,
+    estimatedQuotaUnits: resolvedScan.estimatedQuotaUnits,
+    estimatedQuotaUnitsSavedByCache: resolvedScan.estimatedQuotaUnitsSavedByCache,
     itemsWithoutVideoId,
+    pageCount: resolvedScan.pageCount,
     playlistId: cli.playlistId,
     scannedCount: playlistItems.length,
+    scanSource: resolvedScan.source,
     uniqueVideoCount,
   });
 
@@ -293,7 +342,9 @@ export async function main(): Promise<void> {
     if (!cli.outputJson) {
       console.log("");
       console.log(
-        `${style.warn("Dry run only.")} Re-run with --execute to delete the duplicate playlist items listed above.`,
+        `${style.warn(
+          "Dry run only.",
+        )} Re-run with --execute to delete the duplicate playlist items listed above.`,
       );
     } else {
       printJson({
@@ -304,45 +355,133 @@ export async function main(): Promise<void> {
     return;
   }
 
-  if (!cli.yes) {
+  const usageReport = await getQuotaUsageReport();
+  const estimatedUnitsToday = usageReport.usage.estimatedUnitsToday;
+  const plannedCost = scanReport.duplicateItemCount * PLAYLIST_ITEMS_DELETE_QUOTA_COST;
+
+  if (estimatedUnitsToday + plannedCost > QUOTA_REFERENCE.dailyUnits) {
+    const capableCount = Math.floor(
+      (QUOTA_REFERENCE.dailyUnits - estimatedUnitsToday) / PLAYLIST_ITEMS_DELETE_QUOTA_COST,
+    );
+
+    if (capableCount <= 0) {
+      if (!cli.outputJson) {
+        console.log("");
+        console.log(style.danger("Quota exhaustion warning"));
+        console.log("- You have exhausted your daily local quota estimate.");
+        console.log("- Deletion aborted.");
+      } else {
+        printJson({ ok: false, error: "Quota exhausted", report: scanReport });
+      }
+      return;
+    }
+
     if (!cli.outputJson) {
       console.log("");
-      console.log(style.warn("Deletion warning"));
+      console.log(style.warn("Quota exhaustion warning"));
       console.log(
-        "- Only duplicate playlist items from the playlist above will be deleted.",
+        `- You only have enough estimated quota to safely delete ${style.strong(
+          String(capableCount),
+        )} items today.`,
       );
-      console.log("- The first occurrence of each video will be kept.");
       console.log(
-        `- Type ${style.strong(`delete ${scanReport.duplicateItemCount}`)} to confirm.`,
+        `- Deleting all ${scanReport.duplicateItemCount} duplicates may fail and use up remaining quota.`,
+      );
+      console.log(
+        `- Type ${style.strong(
+          `delete ${capableCount}`,
+        )} to confirm safely deleting just the first ${capableCount} duplicates.`,
       );
       console.log("");
     }
 
-    const confirmed = await promptForDeletionConfirmation(
-      scanReport.duplicateItemCount,
-    );
-    if (!confirmed) {
-      if (!cli.outputJson) {
-        console.log(style.warn("Deletion cancelled."));
-      } else {
-        printJson({
-          ok: true,
-          report: scanReport,
-        });
+    if (!cli.yes) {
+      const confirmed = await promptForPartialDeletion(capableCount);
+      if (!confirmed) {
+        if (!cli.outputJson) {
+          console.log(style.warn("Deletion cancelled."));
+        } else {
+          printJson({ ok: true, report: scanReport });
+        }
+        return;
       }
-      return;
+    } else if (!cli.outputJson) {
+      console.log("");
+      console.log(
+        `${style.warn("Auto-confirm enabled")} with --yes. Proceeding with partial deletion.`,
+      );
     }
-  } else if (!cli.outputJson) {
-    console.log("");
-    console.log(
-      `${style.warn("Auto-confirm enabled")} with --yes. Proceeding with deletion.`,
-    );
+
+    duplicates.length = capableCount;
+    scanReport.duplicateItemCount = capableCount;
+  } else {
+    if (!cli.yes) {
+      if (!cli.outputJson) {
+        console.log("");
+        console.log(style.warn("Deletion warning"));
+        console.log("- Only duplicate playlist items from the playlist above will be deleted.");
+        console.log("- The first occurrence of each video will be kept.");
+        console.log(
+          `- Estimated delete quota cost: ${style.strong(
+            String(scanReport.duplicateItemCount * PLAYLIST_ITEMS_DELETE_QUOTA_COST),
+          )} units.`,
+        );
+        console.log(
+          `- Type ${style.strong(`delete ${scanReport.duplicateItemCount}`)} to confirm.`,
+        );
+        console.log("");
+      }
+
+      const confirmed = await promptForDeletionConfirmation(scanReport.duplicateItemCount);
+      if (!confirmed) {
+        if (!cli.outputJson) {
+          console.log(style.warn("Deletion cancelled."));
+        } else {
+          printJson({
+            ok: true,
+            report: scanReport,
+          });
+        }
+        return;
+      }
+    } else if (!cli.outputJson) {
+      console.log("");
+      console.log(`${style.warn("Auto-confirm enabled")} with --yes. Proceeding with deletion.`);
+    }
+  }
+
+  if (!youtube) {
+    throw new Error("Internal error: expected an authenticated YouTube client before deletion.");
   }
 
   const deletionReport = await deleteDuplicates({
     duplicates,
     outputJson: cli.outputJson,
     youtube,
+  });
+
+  const attemptedDeletes = scanReport.duplicateItemCount - deletionReport.skippedCount;
+  await recordQuotaEntry({
+    at: new Date().toISOString(),
+    attemptedDeletes,
+    deletedCount: deletionReport.deletedCount,
+    estimatedUnits: attemptedDeletes * PLAYLIST_ITEMS_DELETE_QUOTA_COST,
+    failedCount: deletionReport.failed.length,
+    playlistId: cli.playlistId,
+    type: "delete-batch",
+  }).catch((error) => {
+    console.warn(
+      `Failed to update the local quota ledger: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  });
+  await invalidatePlaylistScanCache({ playlistId: cli.playlistId }).catch((error) => {
+    console.warn(
+      `Failed to clear the local playlist cache: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   });
 
   if (cli.outputJson) {
@@ -365,6 +504,7 @@ export function parseArgs(argv: string[]): CliOptions {
   let sawExplicitCommand = false;
   let help = false;
   let execute = false;
+  let refresh = false;
   let sawDryRun = false;
   let yes = false;
   let outputJson = false;
@@ -379,11 +519,7 @@ export function parseArgs(argv: string[]): CliOptions {
     }
 
     if (value.startsWith("--")) {
-      if (
-        !ALLOWED_FLAGS.has(
-          value as typeof ALLOWED_FLAGS extends Set<infer T> ? T : never,
-        )
-      ) {
+      if (!ALLOWED_FLAGS.has(value as typeof ALLOWED_FLAGS extends Set<infer T> ? T : never)) {
         throw new Error(`Unknown flag: ${value}`);
       }
 
@@ -404,6 +540,11 @@ export function parseArgs(argv: string[]): CliOptions {
 
       if (value === "--json") {
         outputJson = true;
+        continue;
+      }
+
+      if (value === "--refresh") {
+        refresh = true;
         continue;
       }
 
@@ -449,10 +590,8 @@ export function parseArgs(argv: string[]): CliOptions {
       throw new Error(`The ${command} command does not take a playlist input.`);
     }
 
-    if (execute || sawDryRun || yes) {
-      throw new Error(
-        `The ${command} command does not accept scan or deletion flags.`,
-      );
+    if (execute || refresh || sawDryRun || yes) {
+      throw new Error(`The ${command} command does not accept scan or deletion flags.`);
     }
 
     return {
@@ -464,15 +603,14 @@ export function parseArgs(argv: string[]): CliOptions {
       playlistId: null,
       playlistInput: null,
       playlistInputKind: null,
+      refresh: false,
       yes: false,
     };
   }
 
   if (command === "completion") {
-    if (execute || sawDryRun || yes) {
-      throw new Error(
-        "The completion command does not accept scan or deletion flags.",
-      );
+    if (execute || refresh || sawDryRun || yes) {
+      throw new Error("The completion command does not accept scan or deletion flags.");
     }
 
     if (playlistInput && playlistInput !== "zsh") {
@@ -488,6 +626,7 @@ export function parseArgs(argv: string[]): CliOptions {
       playlistId: null,
       playlistInput: null,
       playlistInputKind: null,
+      refresh: false,
       yes: false,
     };
   }
@@ -502,13 +641,35 @@ export function parseArgs(argv: string[]): CliOptions {
       playlistId: null,
       playlistInput: null,
       playlistInputKind: null,
+      refresh: false,
       yes: false,
     };
   }
 
-  const normalizedPlaylist = playlistInput
-    ? normalizePlaylistInput(playlistInput)
-    : null;
+  if (command === "quota") {
+    if (playlistInput) {
+      throw new Error("The quota command does not take a playlist input.");
+    }
+
+    if (execute || refresh || sawDryRun || yes) {
+      throw new Error("The quota command does not accept scan or deletion flags.");
+    }
+
+    return {
+      command,
+      completionShell: null,
+      execute: false,
+      help,
+      outputJson,
+      playlistId: null,
+      playlistInput: null,
+      playlistInputKind: null,
+      refresh: false,
+      yes: false,
+    };
+  }
+
+  const normalizedPlaylist = playlistInput ? normalizePlaylistInput(playlistInput) : null;
 
   return {
     command,
@@ -519,29 +680,118 @@ export function parseArgs(argv: string[]): CliOptions {
     playlistId: normalizedPlaylist?.playlistId ?? null,
     playlistInput,
     playlistInputKind: normalizedPlaylist?.inputKind ?? null,
+    refresh,
     yes,
   };
 }
 
-async function safelyListPlaylistItems(
-  youtube: ReturnType<typeof createYouTubeClient>,
-  playlistId: string,
-  spinner: Spinner,
-) {
+async function safelyListPlaylistItems({
+  playlistId,
+  saveToCache,
+  spinner,
+  youtube,
+}: {
+  playlistId: string;
+  saveToCache: boolean;
+  spinner: Spinner;
+  youtube: ReturnType<typeof createYouTubeClient>;
+}): Promise<ResolvedPlaylistScan> {
   try {
-    return await listPlaylistItems({
+    const result = await listPlaylistItems({
       logger: console,
       onProgress: ({ itemsFetched, pageCount }) => {
         spinner.update(
-          `Reading playlist items... ${itemsFetched} fetched across ${pageCount} page${pageCount === 1 ? "" : "s"}`,
+          `Reading playlist items... ${itemsFetched} fetched across ${pageCount} page${
+            pageCount === 1 ? "" : "s"
+          }`,
         );
       },
       playlistId,
       youtube,
     });
+
+    if (saveToCache) {
+      await writePlaylistScanCache({
+        items: result.items,
+        pageCount: result.pageCount,
+        playlistId,
+      }).catch((error) => {
+        console.warn(
+          `Failed to write the local playlist cache: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+    }
+
+    await recordQuotaEntry({
+      at: new Date().toISOString(),
+      estimatedUnits: result.estimatedQuotaUnits,
+      itemCount: result.items.length,
+      pageCount: result.pageCount,
+      playlistId,
+      type: "scan-live",
+    }).catch((error) => {
+      console.warn(
+        `Failed to update the local quota ledger: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+
+    return {
+      cacheAgeMs: null,
+      estimatedQuotaUnits: result.estimatedQuotaUnits,
+      estimatedQuotaUnitsSavedByCache: 0,
+      items: result.items,
+      pageCount: result.pageCount,
+      source: "live",
+    };
   } catch (error) {
     throw new Error(formatApiError(error));
   }
+}
+
+async function maybeReadCachedPlaylistScan(
+  playlistId: string,
+): Promise<ResolvedPlaylistScan | null> {
+  const cached = await readPlaylistScanCache({ playlistId }).catch((error) => {
+    console.warn(
+      `Failed to read the local playlist cache: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return null;
+  });
+  if (!cached) {
+    return null;
+  }
+
+  await recordQuotaEntry({
+    at: new Date().toISOString(),
+    cacheAgeMs: cached.ageMs,
+    estimatedUnits: 0,
+    estimatedUnitsSaved: cached.estimatedQuotaUnitsSaved,
+    itemCount: cached.items.length,
+    pageCount: cached.pageCount,
+    playlistId,
+    type: "scan-cache-hit",
+  }).catch((error) => {
+    console.warn(
+      `Failed to update the local quota ledger: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  });
+
+  return {
+    cacheAgeMs: cached.ageMs,
+    estimatedQuotaUnits: 0,
+    estimatedQuotaUnitsSavedByCache: cached.estimatedQuotaUnitsSaved,
+    items: cached.items,
+    pageCount: cached.pageCount,
+    source: "cache",
+  };
 }
 
 function printUsage(): void {
@@ -550,37 +800,34 @@ function printUsage(): void {
   console.log(style.strong("Usage:"));
   console.log("  yt-ddp setup");
   console.log("  yt-ddp login");
+  console.log("  yt-ddp quota [--json]");
   console.log("  yt-ddp <playlist-id-or-url> [--execute] [--yes] [--json]");
   console.log(
-    "  yt-ddp scan --playlist <playlist-id-or-url> [--execute] [--yes] [--json]",
+    "  yt-ddp scan --playlist <playlist-id-or-url> [--refresh] [--execute] [--yes] [--json]",
   );
   console.log("  yt-ddp completion zsh");
   console.log("");
   console.log(style.strong("Commands:"));
-  console.log(
-    "  setup       Save Google Desktop OAuth credentials into local app config",
-  );
+  console.log("  setup       Save Google Desktop OAuth credentials into local app config");
   console.log("  login       Friendly alias for setup");
-  console.log(
-    "  scan        Explicit scan command. This is also the default action.",
-  );
+  console.log("  quota       Show local cache state and estimated quota usage for yt-ddp");
+  console.log("  scan        Explicit scan command. This is also the default action.");
   console.log("  completion  Print a shell completion script");
   console.log("");
   console.log(style.strong("Flags:"));
   console.log("  --playlist  Playlist ID or full YouTube playlist/watch URL");
-  console.log(
-    "  --dry-run   Scan only and print duplicates. This is the default.",
-  );
+  console.log("  --dry-run   Scan only and print duplicates. This is the default.");
+  console.log("  --refresh   Ignore any cached dry-run scan and fetch live data.");
   console.log("  --execute   Delete duplicate playlist items.");
-  console.log(
-    "  --yes       Skip the delete confirmation prompt. Requires --execute.",
-  );
+  console.log("  --yes       Skip the delete confirmation prompt. Requires --execute.");
   console.log("  --json      Print machine-readable scan/deletion output");
   console.log("  --help, -h  Show this help text.");
   console.log("");
   console.log(style.strong("Examples:"));
   console.log("  yt-ddp setup");
+  console.log("  yt-ddp quota");
   console.log('  yt-ddp "https://www.youtube.com/playlist?list=PLxxxxxxxx"');
+  console.log("  yt-ddp PLxxxxxxxx --refresh");
   console.log("  yt-ddp --playlist PLxxxxxxxx --execute");
   console.log("  yt-ddp completion zsh > ~/.zfunc/_yt-ddp");
 }
@@ -588,9 +835,7 @@ function printUsage(): void {
 function printMissingPlaylistHelp(): void {
   console.log(style.heading("yt-ddp"));
   console.log("");
-  console.log(
-    "Ready when you are. Pass a playlist URL or playlist ID to scan.",
-  );
+  console.log("Ready when you are. Pass a playlist URL or playlist ID to scan.");
   console.log("");
   console.log(style.strong("Try:"));
   console.log('  yt-ddp "https://www.youtube.com/playlist?list=PLxxxxxxxx"');
@@ -601,27 +846,42 @@ function printMissingPlaylistHelp(): void {
 }
 
 function createScanReport({
+  cacheAgeMs,
   duplicates,
+  estimatedQuotaUnits,
+  estimatedQuotaUnitsSavedByCache,
   itemsWithoutVideoId,
+  pageCount,
   playlistId,
   scannedCount,
+  scanSource,
   uniqueVideoCount,
 }: {
+  cacheAgeMs: number | null;
   duplicates: DuplicatePlaylistItem[];
+  estimatedQuotaUnits: number;
+  estimatedQuotaUnitsSavedByCache: number;
   itemsWithoutVideoId: number;
+  pageCount: number;
   playlistId: string;
   scannedCount: number;
+  scanSource: "cache" | "live";
   uniqueVideoCount: number;
 }): ScanReport {
   const duplicateGroups = groupDuplicatesByKeptItem(duplicates);
 
   return {
+    cacheAgeMs,
     duplicateGroups,
     duplicateItemCount: duplicates.length,
+    estimatedQuotaUnits,
+    estimatedQuotaUnitsSavedByCache,
     itemsWithoutVideoId,
+    pageCount,
     playlistCountAfterCleanup: scannedCount - duplicates.length,
     playlistId,
     scannedCount,
+    scanSource,
     uniqueVideoCount,
   };
 }
@@ -634,15 +894,22 @@ function printScanSummary(report: ScanReport): void {
   console.log(summaryLine("Duplicate groups", report.duplicateGroups.length));
   console.log(summaryLine("Extra copies removable", report.duplicateItemCount));
   console.log(
-    summaryLine(
-      "Playlist size after cleanup",
-      report.playlistCountAfterCleanup,
-    ),
+    summaryTextLine("Scan source", report.scanSource === "cache" ? "Local cache" : "YouTube API"),
   );
+  console.log(summaryLine("Pages read", report.pageCount));
+  console.log(summaryLine("Estimated quota units used", report.estimatedQuotaUnits));
+  console.log(summaryLine("Playlist size after cleanup", report.playlistCountAfterCleanup));
+
+  if (report.scanSource === "cache" && report.cacheAgeMs !== null) {
+    console.log(summaryTextLine("Cache age", formatDuration(report.cacheAgeMs)));
+    console.log(summaryLine("Estimated quota units saved", report.estimatedQuotaUnitsSavedByCache));
+  }
 
   if (report.itemsWithoutVideoId > 0) {
     console.log(
-      `${style.warn("Items skipped without a usable videoId")}: ${style.warn(String(report.itemsWithoutVideoId))}`,
+      `${style.warn("Items skipped without a usable videoId")}: ${style.warn(
+        String(report.itemsWithoutVideoId),
+      )}`,
     );
   }
 
@@ -651,21 +918,30 @@ function printScanSummary(report: ScanReport): void {
     return;
   }
 
+  console.log(
+    summaryLine(
+      "Estimated quota units to delete all duplicates",
+      report.duplicateItemCount * PLAYLIST_ITEMS_DELETE_QUOTA_COST,
+    ),
+  );
+
   console.log("");
   console.log(style.heading("Duplicate groups"));
   console.log(style.muted("----------------"));
 
   for (const [groupIndex, group] of report.duplicateGroups.entries()) {
     console.log(
-      `${style.strong(`${groupIndex + 1}.`)} ${group.keptTitle} ${style.muted(`(${group.copyCount} copies, remove ${group.removableCount})`)}`,
+      `${style.strong(`${groupIndex + 1}.`)} ${group.keptTitle} ${style.muted(
+        `(${group.copyCount} copies, remove ${group.removableCount})`,
+      )}`,
     );
-    console.log(
-      `   ${style.ok("Keep")} #${style.ok(String(group.firstOccurrenceIndex))}`,
-    );
+    console.log(`   ${style.ok("Keep")} #${style.ok(String(group.firstOccurrenceIndex))}`);
 
     for (const duplicate of group.duplicates) {
       console.log(
-        `   ${style.danger("Remove")} #${style.danger(String(duplicate.duplicateIndex))}: ${duplicate.title}`,
+        `   ${style.danger("Remove")} #${style.danger(
+          String(duplicate.duplicateIndex),
+        )}: ${duplicate.title}`,
       );
     }
   }
@@ -744,7 +1020,9 @@ export async function deleteDuplicates({
     }
 
     console.log(
-      `${style.accent("Delete")} ${index + 1}/${duplicates.length}: #${duplicate.duplicateIndex} ${duplicate.title} ${style.muted(`(active ${activeCount})`)}`,
+      `${style.accent("Delete")} ${index + 1}/${duplicates.length}: #${
+        duplicate.duplicateIndex
+      } ${duplicate.title} ${style.muted(`(active ${activeCount})`)}`,
     );
   };
 
@@ -757,7 +1035,9 @@ export async function deleteDuplicates({
     }
 
     const progress = style.muted(
-      `(${completedCount}/${duplicates.length} finished, ${duplicates.length - completedCount} remaining)`,
+      `(${completedCount}/${duplicates.length} finished, ${
+        duplicates.length - completedCount
+      } remaining)`,
     );
 
     if (outcome.kind === "success") {
@@ -788,8 +1068,7 @@ export async function deleteDuplicates({
       }
 
       const { duplicate, index } = reservation;
-      let outcome: { kind: "failure"; message: string } | { kind: "success" } =
-        { kind: "success" };
+      let outcome: { kind: "failure"; message: string } | { kind: "success" } = { kind: "success" };
 
       inFlightCount += 1;
       logDeleteStart(duplicate, index, inFlightCount);
@@ -839,11 +1118,17 @@ export async function deleteDuplicates({
 }
 
 function printDeletionSummary(report: DeletionReport): void {
+  const attemptedDeletes = report.deletedCount + report.failed.length;
+
   console.log("");
   console.log(style.heading("Delete summary"));
   console.log(style.muted("--------------"));
+  console.log(summaryLine("Attempted", attemptedDeletes));
   console.log(summaryLine("Deleted", report.deletedCount));
   console.log(summaryLine("Failed", report.failed.length));
+  console.log(
+    summaryLine("Estimated quota units used", attemptedDeletes * PLAYLIST_ITEMS_DELETE_QUOTA_COST),
+  );
 
   if (report.aborted) {
     console.log(`${style.warn("Stopped early")}: ${report.abortedReason}`);
@@ -859,16 +1144,12 @@ function printDeletionSummary(report: DeletionReport): void {
     console.log(style.warn("Failed removals"));
     console.log(style.muted("----------------"));
     for (const failure of report.failed) {
-      console.log(
-        `- #${failure.duplicateIndex} ${failure.title}: ${failure.message}`,
-      );
+      console.log(`- #${failure.duplicateIndex} ${failure.title}: ${failure.message}`);
     }
   }
 }
 
-function groupDuplicatesByKeptItem(
-  duplicates: DuplicatePlaylistItem[],
-): DuplicateGroup[] {
+function groupDuplicatesByKeptItem(duplicates: DuplicatePlaylistItem[]): DuplicateGroup[] {
   const groups = new Map<
     string,
     {
@@ -906,6 +1187,10 @@ function summaryLine(label: string, value: number): string {
   return `${style.dim(label)}: ${style.strong(String(value))}`;
 }
 
+function summaryTextLine(label: string, value: string): string {
+  return `${style.dim(label)}: ${value}`;
+}
+
 function printRunHeader(cli: CliOptions): void {
   if (cli.command !== "scan" || !cli.playlistId) {
     return;
@@ -913,19 +1198,134 @@ function printRunHeader(cli: CliOptions): void {
 
   console.log(style.heading("yt-ddp"));
   console.log("");
-  console.log(
-    `Mode: ${cli.execute ? style.danger("Execute") : style.warn("Dry run")}`,
-  );
+  console.log(`Mode: ${cli.execute ? style.danger("Execute") : style.warn("Dry run")}`);
   console.log(`Playlist: ${style.accent(cli.playlistId)}`);
 
   if (cli.playlistInputKind === "url" && cli.playlistInput) {
     console.log(`Input: URL (${cli.playlistInput})`);
   }
 
-  console.log(
-    style.dim("Scope: only the playlist above will be scanned or modified."),
-  );
+  console.log(style.dim("Scope: only the playlist above will be scanned or modified."));
   console.log("");
+}
+
+async function printQuotaReport({ outputJson }: { outputJson: boolean }): Promise<void> {
+  const [report, oauthSource] = await Promise.all([getQuotaUsageReport(), resolveOAuthSource()]);
+  const projectId = oauthSource.config?.projectId ?? null;
+  const quotaConsoleUrl = projectId
+    ? `https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas?project=${encodeURIComponent(
+        projectId,
+      )}`
+    : null;
+
+  if (outputJson) {
+    printJson({
+      ok: true,
+      quota: {
+        ...report,
+        oauthProjectId: projectId,
+        quotaConsoleUrl,
+      },
+    });
+    return;
+  }
+
+  console.log(style.heading("Local quota estimate"));
+  console.log(style.muted("--------------------"));
+  console.log(summaryLine("Estimated units used today", report.usage.estimatedUnitsToday));
+  console.log(
+    summaryTextLine(
+      "Share of 10,000-unit reference budget",
+      `${report.usage.percentOfReferenceDailyQuotaUsedToday.toFixed(2)}%`,
+    ),
+  );
+  console.log(
+    summaryLine(
+      "Estimated units saved by cache today",
+      report.usage.estimatedUnitsSavedByCacheToday,
+    ),
+  );
+  console.log(
+    summaryLine("Estimated units used last 7 days", report.usage.estimatedUnitsLast7Days),
+  );
+  console.log(summaryLine("Estimated units used total", report.usage.estimatedUnitsTotal));
+  console.log(summaryLine("Live scans today", report.usage.liveScansToday));
+  console.log(summaryLine("Cache hits today", report.usage.cacheHitsToday));
+  console.log(summaryLine("Delete batches today", report.usage.deleteBatchesToday));
+  console.log("");
+  console.log(style.heading("Playlist cache"));
+  console.log(style.muted("--------------"));
+  console.log(
+    summaryTextLine(
+      "Status",
+      report.cache.enabled ? `Enabled (${report.cache.ttlMinutes} minute TTL)` : "Disabled",
+    ),
+  );
+  console.log(summaryLine("Cached playlists", report.cache.entries.length));
+
+  if (report.cache.entries.length === 0) {
+    console.log(style.dim("No cached scans yet."));
+  } else {
+    for (const entry of report.cache.entries) {
+      console.log(
+        `- ${style.accent(entry.playlistId)}: ${entry.itemCount} items, ${
+          entry.pageCount
+        } page${entry.pageCount === 1 ? "" : "s"}, age ${formatDuration(entry.ageMs)}`,
+      );
+    }
+  }
+
+  console.log("");
+  console.log(style.heading("Project"));
+  console.log(style.muted("-------"));
+  console.log(summaryTextLine("OAuth source", oauthSource.source ?? "not configured"));
+
+  if (projectId) {
+    console.log(summaryTextLine("Google Cloud project", projectId));
+    console.log(summaryTextLine("Quota console", quotaConsoleUrl ?? ""));
+  } else {
+    console.log(
+      style.dim(
+        "Project ID is not available from the current OAuth config, so the CLI cannot deep-link the quota page.",
+      ),
+    );
+  }
+
+  console.log("");
+  console.log(
+    style.dim(
+      "These numbers are local estimates from yt-ddp activity. For authoritative quota usage or remaining quota, check Google Cloud Console or Cloud Monitoring.",
+    ),
+  );
+  console.log(
+    style.dim(
+      `Reference costs used here: playlistItems.list ~= ${QUOTA_REFERENCE.listUnitsPerPage} unit per page, playlistItems.delete ~= ${QUOTA_REFERENCE.deleteUnitsPerItem} units per item.`,
+    ),
+  );
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1_000) {
+    return "under 1 second";
+  }
+
+  const totalSeconds = Math.floor(durationMs / 1_000);
+  if (totalSeconds < 60) {
+    return `${totalSeconds} second${totalSeconds === 1 ? "" : "s"}`;
+  }
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    return `${totalMinutes} minute${totalMinutes === 1 ? "" : "s"}`;
+  }
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    return `${totalHours} hour${totalHours === 1 ? "" : "s"}`;
+  }
+
+  const totalDays = Math.floor(totalHours / 24);
+  return `${totalDays} day${totalDays === 1 ? "" : "s"}`;
 }
 
 function normalizePlaylistInput(input: string): {
@@ -960,9 +1360,7 @@ function extractPlaylistIdFromUrl(input: string): string | null {
       : null;
 
   if (!candidate) {
-    return input.includes("list=")
-      ? extractPlaylistIdFromListParam(input)
-      : null;
+    return input.includes("list=") ? extractPlaylistIdFromListParam(input) : null;
   }
 
   try {
@@ -1011,9 +1409,7 @@ function validatePlaylistId(playlistId: string): string {
   return playlistId;
 }
 
-async function promptForDeletionConfirmation(
-  duplicateCount: number,
-): Promise<boolean> {
+async function promptForDeletionConfirmation(duplicateCount: number): Promise<boolean> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -1023,6 +1419,23 @@ async function promptForDeletionConfirmation(
   try {
     const answer = await new Promise<string>((resolve) => {
       rl.question(`Type "${expectedPhrase}" to continue: `, resolve);
+    });
+    return answer.trim().toLowerCase() === expectedPhrase;
+  } finally {
+    rl.close();
+  }
+}
+
+async function promptForPartialDeletion(capableCount: number): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  const expectedPhrase = `delete ${capableCount}`;
+
+  try {
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(`Type "${expectedPhrase}" to continue with partial deletion: `, resolve);
     });
     return answer.trim().toLowerCase() === expectedPhrase;
   } finally {
@@ -1048,6 +1461,7 @@ _yt_ddp_commands=(
   'scan:scan a playlist for duplicates'
   'setup:save OAuth client credentials to local app config'
   'login:alias for setup'
+  'quota:show local cache state and estimated quota usage'
   'completion:print a shell completion script'
   'help:show help'
 )
@@ -1055,6 +1469,7 @@ _yt_ddp_commands=(
 _arguments -C \\
   '--playlist[Playlist ID or full YouTube playlist/watch URL]:playlist input:' \\
   '--dry-run[Scan only and print duplicates]' \\
+  '--refresh[Ignore cached dry-run results and fetch live data]' \\
   '--execute[Delete duplicate playlist items]' \\
   '--yes[Skip delete confirmation; requires --execute]' \\
   '--json[Print machine-readable output]' \\

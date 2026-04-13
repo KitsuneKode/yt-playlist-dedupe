@@ -7,6 +7,7 @@ _yt_ddp_commands=(
   'scan:scan a playlist for duplicates'
   'setup:save OAuth client credentials to local app config'
   'login:alias for setup'
+  'quota:show local cache state and estimated quota usage'
   'completion:print a shell completion script'
   'help:show help'
 )
@@ -14,6 +15,7 @@ _yt_ddp_commands=(
 _arguments -C \
   '--playlist[Playlist ID or full YouTube playlist/watch URL]:playlist input:' \
   '--dry-run[Scan only and print duplicates]' \
+  '--refresh[Ignore cached dry-run results and fetch live data]' \
   '--execute[Delete duplicate playlist items]' \
   '--yes[Skip delete confirmation; requires --execute]' \
   '--json[Print machine-readable output]' \

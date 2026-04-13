@@ -6,10 +6,7 @@ import { promptForCredentialsFile } from "./setup.js";
 
 test("promptForCredentialsFile accepts the detected OAuth file on Enter", async () => {
   const workspaceDir = await mkdtemp(join(tmpdir(), "yt-ddp-setup-"));
-  const suggestedFile = join(
-    workspaceDir,
-    "client_secret_demo.apps.googleusercontent.com.json",
-  );
+  const suggestedFile = join(workspaceDir, "client_secret_demo.apps.googleusercontent.com.json");
 
   await writeFile(
     suggestedFile,

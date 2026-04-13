@@ -1,13 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import {
-  chmod,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -31,12 +24,8 @@ export interface Logger {
 }
 
 export type OAuthClient = InstanceType<typeof google.auth.OAuth2>;
-type OAuthCredentials = NonNullable<
-  Parameters<OAuthClient["setCredentials"]>[0]
->;
-type GenerateAuthUrlOptions = NonNullable<
-  Parameters<OAuthClient["generateAuthUrl"]>[0]
->;
+type OAuthCredentials = NonNullable<Parameters<OAuthClient["setCredentials"]>[0]>;
+type GenerateAuthUrlOptions = NonNullable<Parameters<OAuthClient["generateAuthUrl"]>[0]>;
 
 const CLIENT_ID_ENV_KEYS = [
   "YT_DDP_OAUTH_CLIENT_ID",
@@ -67,6 +56,7 @@ const CLIENT_FILE_ENV_KEYS = [
 export interface OAuthConfig {
   clientId: string;
   clientSecret: string;
+  projectId?: string;
 }
 
 export type OAuthSourceKind =
@@ -115,6 +105,7 @@ interface InstalledClientFile {
   installed?: {
     client_id?: string;
     client_secret?: string;
+    project_id?: string;
   };
 }
 
@@ -131,9 +122,7 @@ export async function getAuthenticatedClient({
 
   if (!oauthConfig) {
     throw createMissingOAuthConfigError(
-      resolution.suggestedClientFile
-        ? dirname(resolution.suggestedClientFile)
-        : process.cwd(),
+      resolution.suggestedClientFile ? dirname(resolution.suggestedClientFile) : process.cwd(),
     );
   }
 
@@ -185,10 +174,8 @@ async function authorizeInteractively({
   registerTokenPersistence(oauthClient, tokenPath, logger);
 
   try {
-    const { codeVerifier, codeChallenge } =
-      await oauthClient.generateCodeVerifierAsync();
-    const codeChallengeMethod =
-      "S256" as GenerateAuthUrlOptions["code_challenge_method"];
+    const { codeVerifier, codeChallenge } = await oauthClient.generateCodeVerifierAsync();
+    const codeChallengeMethod = "S256" as GenerateAuthUrlOptions["code_challenge_method"];
     const authUrl = oauthClient.generateAuthUrl({
       access_type: "offline",
       scope: [scope],
@@ -231,12 +218,10 @@ async function startLoopbackServer(): Promise<LoopbackServerState> {
   let resolveCodePromise!: (value: OAuthCallbackPayload) => void;
   let rejectCodePromise!: (reason?: unknown) => void;
 
-  const codePromise = new Promise<OAuthCallbackPayload>(
-    (resolveCode, rejectCode) => {
-      resolveCodePromise = resolveCode;
-      rejectCodePromise = rejectCode;
-    },
-  );
+  const codePromise = new Promise<OAuthCallbackPayload>((resolveCode, rejectCode) => {
+    resolveCodePromise = resolveCode;
+    rejectCodePromise = rejectCode;
+  });
 
   const server = createServer((request, response) => {
     handleOAuthCallback({
@@ -259,29 +244,20 @@ async function startLoopbackServer(): Promise<LoopbackServerState> {
 
   const redirectUri = `http://127.0.0.1:${address.port}${CALLBACK_PATH}`;
 
-  async function waitForCode(
-    expectedState: string,
-    logger: Logger,
-  ): Promise<string> {
+  async function waitForCode(expectedState: string, logger: Logger): Promise<string> {
     const timeout = setTimeout(
       () => {
-        rejectCodePromise(
-          new Error("Timed out waiting for OAuth authorization."),
-        );
+        rejectCodePromise(new Error("Timed out waiting for OAuth authorization."));
       },
       5 * 60 * 1000,
     );
 
     try {
-      logger.log(
-        "Waiting for the browser callback on a local loopback port...",
-      );
+      logger.log("Waiting for the browser callback on a local loopback port...");
       const { code, state } = await codePromise;
 
       if (!code) {
-        throw new Error(
-          "OAuth callback did not include an authorization code.",
-        );
+        throw new Error("OAuth callback did not include an authorization code.");
       }
 
       if (state !== expectedState) {
@@ -323,17 +299,13 @@ function handleOAuthCallback({
 
     if (authError) {
       response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
-      response.end(
-        "Authorization failed. You can close this tab and return to the terminal.",
-      );
+      response.end("Authorization failed. You can close this tab and return to the terminal.");
       rejectCodePromise(new Error(describeOAuthAuthorizationError(authError)));
       return;
     }
 
     response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-    response.end(
-      "Authorization received. You can close this tab and return to the terminal.",
-    );
+    response.end("Authorization received. You can close this tab and return to the terminal.");
     resolveCodePromise({ code, state });
   } catch (error) {
     response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
@@ -389,8 +361,7 @@ export async function resolveOAuthSource(
     };
   }
 
-  const persistedConfig =
-    await loadPersistedOAuthClientConfig(clientConfigPath);
+  const persistedConfig = await loadPersistedOAuthClientConfig(clientConfigPath);
   if (persistedConfig) {
     return {
       clientConfigPath,
@@ -435,9 +406,7 @@ export async function inspectOAuthSetup(): Promise<OAuthSetupStatus> {
   };
 }
 
-export async function readOAuthClientFile(
-  filePath: string,
-): Promise<OAuthConfig> {
+export async function readOAuthClientFile(filePath: string): Promise<OAuthConfig> {
   const raw = await readFile(resolve(filePath), "utf8");
   return parseInstalledClientJson(raw, "OAuth client file");
 }
@@ -453,6 +422,10 @@ export async function savePersistedOAuthClientConfig(
   });
   await chmod(clientConfigPath, 0o600).catch(() => {});
   return clientConfigPath;
+}
+
+export function getAppConfigDir(options: OAuthResolutionOptions = {}): string {
+  return getConfigDir(options);
 }
 
 async function findWorkspaceOAuthClientFile({
@@ -483,14 +456,10 @@ async function listWorkspaceOAuthCandidates(
     const entries = await readdir(workspaceDir, { withFileTypes: true });
 
     return entries
-      .filter(
-        (entry) =>
-          entry.isFile() && isLikelyWorkspaceOAuthClientFile(entry.name),
-      )
+      .filter((entry) => entry.isFile() && isLikelyWorkspaceOAuthClientFile(entry.name))
       .sort(
         (left, right) =>
-          scoreWorkspaceOAuthClientFile(right.name) -
-            scoreWorkspaceOAuthClientFile(left.name) ||
+          scoreWorkspaceOAuthClientFile(right.name) - scoreWorkspaceOAuthClientFile(left.name) ||
           left.name.localeCompare(right.name),
       )
       .map((entry) => ({ name: entry.name }));
@@ -510,9 +479,7 @@ function loadOAuthConfigFromEnv(env: NodeJS.ProcessEnv): OAuthConfig | null {
   return { clientId, clientSecret };
 }
 
-function loadOAuthConfigFromJsonEnv(
-  env: NodeJS.ProcessEnv,
-): OAuthConfig | null {
+function loadOAuthConfigFromJsonEnv(env: NodeJS.ProcessEnv): OAuthConfig | null {
   const rawJson = getFirstDefinedEnvValue(env, CLIENT_JSON_ENV_KEYS);
 
   if (rawJson) {
@@ -529,15 +496,11 @@ function loadOAuthConfigFromJsonEnv(
     const decoded = Buffer.from(base64Json, "base64").toString("utf8");
     return parseInstalledClientJson(decoded, "YT_DDP_OAUTH_CLIENT_JSON_BASE64");
   } catch (error) {
-    throw new Error(
-      `Failed to decode YT_DDP_OAUTH_CLIENT_JSON_BASE64: ${getErrorMessage(error)}`,
-    );
+    throw new Error(`Failed to decode YT_DDP_OAUTH_CLIENT_JSON_BASE64: ${getErrorMessage(error)}`);
   }
 }
 
-function getConfiguredOAuthClientFilePath(
-  env: NodeJS.ProcessEnv,
-): string | null {
+function getConfiguredOAuthClientFilePath(env: NodeJS.ProcessEnv): string | null {
   return getFirstDefinedEnvValue(env, CLIENT_FILE_ENV_KEYS);
 }
 
@@ -555,14 +518,12 @@ function getConfigDir(options: OAuthResolutionOptions = {}): string {
   }
 
   const env = options.env ?? process.env;
-  const configuredDir =
-    env.YT_DDP_CONFIG_DIR ?? env.YT_PLAYLIST_DEDUPE_CONFIG_DIR;
+  const configuredDir = env.YT_DDP_CONFIG_DIR ?? env.YT_PLAYLIST_DEDUPE_CONFIG_DIR;
   if (configuredDir) {
     return resolve(configuredDir);
   }
 
-  const baseDir =
-    env.XDG_CONFIG_HOME ?? env.APPDATA ?? join(homedir(), ".config");
+  const baseDir = env.XDG_CONFIG_HOME ?? env.APPDATA ?? join(homedir(), ".config");
 
   return join(baseDir, "yt-ddp");
 }
@@ -582,9 +543,7 @@ async function loadPersistedOAuthClientConfig(
   }
 }
 
-async function loadSavedTokens(
-  tokenPath: string,
-): Promise<OAuthCredentials | null> {
+async function loadSavedTokens(tokenPath: string): Promise<OAuthCredentials | null> {
   try {
     const raw = await readFile(tokenPath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
@@ -603,11 +562,7 @@ async function loadSavedTokens(
   }
 }
 
-function registerTokenPersistence(
-  client: OAuthClient,
-  tokenPath: string,
-  logger: Logger,
-): void {
+function registerTokenPersistence(client: OAuthClient, tokenPath: string, logger: Logger): void {
   client.on("tokens", async (tokens) => {
     try {
       const currentTokens = (await loadSavedTokens(tokenPath)) ?? {};
@@ -616,17 +571,12 @@ function registerTokenPersistence(
         ...tokens,
       } as OAuthCredentials);
     } catch (error) {
-      logger.warn(
-        `Failed to persist refreshed OAuth token: ${getErrorMessage(error)}`,
-      );
+      logger.warn(`Failed to persist refreshed OAuth token: ${getErrorMessage(error)}`);
     }
   });
 }
 
-async function persistTokens(
-  tokenPath: string,
-  tokens: OAuthCredentials,
-): Promise<void> {
+async function persistTokens(tokenPath: string, tokens: OAuthCredentials): Promise<void> {
   await mkdir(dirname(tokenPath), { recursive: true, mode: 0o700 });
   await writeFile(tokenPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
   await chmod(tokenPath, 0o600).catch(() => {});
@@ -660,41 +610,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function parsePersistedOAuthClientConfig(
-  raw: string,
-  sourceLabel: string,
-): OAuthConfig {
+function parsePersistedOAuthClientConfig(raw: string, sourceLabel: string): OAuthConfig {
   const parsed = JSON.parse(raw) as unknown;
 
   if (isRecord(parsed)) {
-    const clientId =
-      typeof parsed.clientId === "string" ? parsed.clientId : null;
-    const clientSecret =
-      typeof parsed.clientSecret === "string" ? parsed.clientSecret : null;
+    const clientId = typeof parsed.clientId === "string" ? parsed.clientId : null;
+    const clientSecret = typeof parsed.clientSecret === "string" ? parsed.clientSecret : null;
+    const projectId = typeof parsed.projectId === "string" ? parsed.projectId : undefined;
 
     if (clientId && clientSecret) {
-      return { clientId, clientSecret };
+      return { clientId, clientSecret, projectId };
     }
   }
 
   return parseInstalledClientJson(raw, sourceLabel);
 }
 
-function parseInstalledClientJson(
-  raw: string,
-  sourceLabel: string,
-): OAuthConfig {
+function parseInstalledClientJson(raw: string, sourceLabel: string): OAuthConfig {
   const parsed = JSON.parse(raw) as InstalledClientFile;
   const clientId = parsed.installed?.client_id;
   const clientSecret = parsed.installed?.client_secret;
+  const projectId = parsed.installed?.project_id;
 
   if (!clientId || !clientSecret) {
-    throw new Error(
-      `${sourceLabel} must contain Desktop app credentials under the installed key.`,
-    );
+    throw new Error(`${sourceLabel} must contain Desktop app credentials under the installed key.`);
   }
 
-  return { clientId, clientSecret };
+  return {
+    clientId,
+    clientSecret,
+    projectId: typeof projectId === "string" ? projectId : undefined,
+  };
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -702,23 +648,16 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 }
 
 function isLikelyWorkspaceOAuthClientFile(fileName: string): boolean {
-  return WORKSPACE_OAUTH_FILE_PATTERNS.some((pattern) =>
-    pattern.test(fileName),
-  );
+  return WORKSPACE_OAUTH_FILE_PATTERNS.some((pattern) => pattern.test(fileName));
 }
 
 function scoreWorkspaceOAuthClientFile(fileName: string): number {
-  const index = WORKSPACE_OAUTH_FILE_PATTERNS.findIndex((pattern) =>
-    pattern.test(fileName),
-  );
+  const index = WORKSPACE_OAUTH_FILE_PATTERNS.findIndex((pattern) => pattern.test(fileName));
 
   return index === -1 ? -1 : WORKSPACE_OAUTH_FILE_PATTERNS.length - index;
 }
 
-function getFirstDefinedEnvValue(
-  env: NodeJS.ProcessEnv,
-  keys: readonly string[],
-): string | null {
+function getFirstDefinedEnvValue(env: NodeJS.ProcessEnv, keys: readonly string[]): string | null {
   for (const key of keys) {
     const value = env[key];
     if (value) {

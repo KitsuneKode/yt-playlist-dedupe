@@ -12,6 +12,7 @@ test("parseArgs defaults to dry-run mode", () => {
     playlistId: "PLabc123",
     playlistInput: "PLabc123",
     playlistInputKind: "id",
+    refresh: false,
   });
 });
 
@@ -26,6 +27,7 @@ test("parseArgs enables execute mode explicitly", () => {
     playlistId: "PLabc123",
     playlistInput: "PLabc123",
     playlistInputKind: "id",
+    refresh: false,
   });
 });
 
@@ -36,9 +38,7 @@ test("parseArgs rejects conflicting flags", () => {
 });
 
 test("parseArgs accepts playlist URLs", () => {
-  expect(
-    parseArgs(["https://www.youtube.com/watch?v=abc123&list=PLabc123"]),
-  ).toEqual({
+  expect(parseArgs(["https://www.youtube.com/watch?v=abc123&list=PLabc123"])).toEqual({
     command: "scan",
     completionShell: null,
     help: false,
@@ -48,6 +48,7 @@ test("parseArgs accepts playlist URLs", () => {
     playlistId: "PLabc123",
     playlistInput: "https://www.youtube.com/watch?v=abc123&list=PLabc123",
     playlistInputKind: "url",
+    refresh: false,
   });
 });
 
@@ -62,13 +63,12 @@ test("parseArgs accepts --playlist", () => {
     playlistId: "PLabc123",
     playlistInput: "PLabc123",
     playlistInputKind: "id",
+    refresh: false,
   });
 });
 
 test("parseArgs rejects --yes without execute", () => {
-  expect(() => parseArgs(["PLabc123", "--yes"])).toThrow(
-    "Use --yes only together with --execute.",
-  );
+  expect(() => parseArgs(["PLabc123", "--yes"])).toThrow("Use --yes only together with --execute.");
 });
 
 test("parseArgs recognizes setup command", () => {
@@ -82,6 +82,7 @@ test("parseArgs recognizes setup command", () => {
     playlistId: null,
     playlistInput: null,
     playlistInputKind: null,
+    refresh: false,
   });
 });
 
@@ -96,6 +97,7 @@ test("parseArgs recognizes login as a setup alias", () => {
     playlistId: null,
     playlistInput: null,
     playlistInputKind: null,
+    refresh: false,
   });
 });
 
@@ -110,6 +112,37 @@ test("parseArgs enables json output for scans", () => {
     playlistId: "PLabc123",
     playlistInput: "PLabc123",
     playlistInputKind: "id",
+    refresh: false,
+  });
+});
+
+test("parseArgs supports refresh for live scans", () => {
+  expect(parseArgs(["PLabc123", "--refresh"])).toEqual({
+    command: "scan",
+    completionShell: null,
+    help: false,
+    execute: false,
+    outputJson: false,
+    yes: false,
+    playlistId: "PLabc123",
+    playlistInput: "PLabc123",
+    playlistInputKind: "id",
+    refresh: true,
+  });
+});
+
+test("parseArgs recognizes the quota command", () => {
+  expect(parseArgs(["quota", "--json"])).toEqual({
+    command: "quota",
+    completionShell: null,
+    help: false,
+    execute: false,
+    outputJson: true,
+    yes: false,
+    playlistId: null,
+    playlistInput: null,
+    playlistInputKind: null,
+    refresh: false,
   });
 });
 
@@ -124,5 +157,6 @@ test("parseArgs supports zsh completion command", () => {
     playlistId: null,
     playlistInput: null,
     playlistInputKind: null,
+    refresh: false,
   });
 });

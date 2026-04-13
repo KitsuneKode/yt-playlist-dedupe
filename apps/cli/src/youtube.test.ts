@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  formatApiError,
-  isRetryableApiError,
-  shouldAbortRemainingDeletions,
-} from "./youtube.js";
+import { formatApiError, isRetryableApiError, shouldAbortRemainingDeletions } from "./youtube.js";
 
 test("isRetryableApiError returns true for transient rate limit errors", () => {
   expect(
