@@ -20,7 +20,7 @@
     "url": "git+https://github.com/KitsuneKode/yt-playlist-dedupe.git"
   },
   "bin": {
-    "yt-ddp": "./dist/index.js"
+    "yt-ddp": "dist/index.js"
   },
   "files": [
     "dist",
