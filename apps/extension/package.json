@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "dev:firefox": "TARGET_BROWSER=firefox vite",
-    "build": "vite build",
+    "build": "vite build && bun run build:firefox && bun run zip",
     "build:firefox": "TARGET_BROWSER=firefox vite build",
+    "zip": "bun run scripts/zip.ts",
     "lint": "oxlint src",
     "preview": "vite preview",
     "test": "playwright test"
@@ -29,11 +30,13 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.23",
     "@playwright/test": "^1.59.1",
+    "@types/adm-zip": "^0.5.8",
     "@types/chrome": "^0.0.263",
     "@types/node": "^25.6.0",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^4.2.1",
+    "adm-zip": "^0.5.17",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
     "sharp": "^0.34.5",
