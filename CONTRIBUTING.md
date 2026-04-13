@@ -42,6 +42,7 @@ This project is structured as a **Turborepo** monorepo:
 We use Turborepo to orchestrate tasks across all packages from the root directory.
 
 - `bun run build`: Compiles all packages (CLI, Chrome Extension, Firefox Extension, Web).
+- `bun run clean`: Thoroughly removes all build artifacts, `.next`, `.turbo`, and `node_modules` from the entire monorepo to start fresh.
 - `bun run test`: Runs unit and E2E tests across all packages.
 - `bun run lint`: Runs the Oxc linter across the monorepo.
 - `bun run format`: Formats code using `oxfmt`.
