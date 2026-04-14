@@ -1,46 +1,49 @@
-import { $ } from "bun";
 import { rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { Glob } from "bun";
 
 const rootDir = process.cwd();
 
-const pathsToClean = [
-  "node_modules",
-  ".turbo",
-  ".next",
-  "apps/*/node_modules",
-  "packages/*/node_modules",
-  "apps/*/dist",
-  "apps/*/out",
-  "apps/*/build",
-  "apps/web/.next",
-  "packages/*/dist",
-  "packages/*/out",
-  "packages/*/build",
-];
+// A single unified pattern for root and nested workspace directories
+const cleanPattern =
+  "{node_modules,.turbo,.next,coverage,.cache,{apps,packages}/*/{node_modules,dist,out,build,.next,.turbo,coverage,.cache}}";
 
-console.log("🚀 Starting deep clean...");
+console.log("🚀 Starting blazing fast deep clean...");
+const startTime = performance.now();
 
-// We use Bun's glob to find actual existing paths to avoid "no matches found" shell errors
-const glob = new Bun.Glob("{apps,packages}/*/{node_modules,dist,out,build,.next}");
+async function runDeepClean() {
+  const glob = new Glob(cleanPattern);
+  const deletePromises: Promise<string | null>[] = [];
+  const trackedPaths = new Set<string>();
 
-const matchedPaths = Array.from(glob.scanSync({ cwd: rootDir, onlyFiles: false }));
-const allPaths = [...new Set([...matchedPaths, "node_modules", ".turbo", ".next"])];
+  // Scan and initiate deletions immediately as matches are found
+  for await (const match of glob.scan({ cwd: rootDir, onlyFiles: false, dot: true })) {
+    if (trackedPaths.has(match)) continue;
+    trackedPaths.add(match);
 
-let deletedCount = 0;
+    const fullPath = join(rootDir, match);
 
-for (const p of allPaths) {
-  const fullPath = join(rootDir, p);
-  if (existsSync(fullPath)) {
-    try {
-      await rm(fullPath, { recursive: true, force: true });
-      console.log(`  - Cleaned: ${p}`);
-      deletedCount++;
-    } catch (err) {
-      console.error(`  - Failed to clean ${p}:`, err);
-    }
+    // We start the promise immediately but track it to wait later
+    const p = rm(fullPath, { recursive: true, force: true })
+      .then(() => match)
+      .catch((err) => {
+        console.error(`  ❌ Failed to clean ${match}:`, err.message);
+        return null;
+      });
+
+    deletePromises.push(p);
   }
+
+  const results = await Promise.all(deletePromises);
+  const deletedCount = results.filter(Boolean).length;
+  const endTime = performance.now();
+  const duration = ((endTime - startTime) / 1000).toFixed(2);
+
+  if (deletedCount > 0) {
+    results.forEach((res) => res && console.log(`  🗑️  Cleaned: ${res}`));
+  }
+
+  console.log(`\n✨ Clean complete. Removed ${deletedCount} directories/files in ${duration}s.`);
 }
 
-console.log(`\n✨ Clean complete. Removed ${deletedCount} directories.`);
+runDeepClean().catch(console.error);

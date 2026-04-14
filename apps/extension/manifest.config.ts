@@ -29,8 +29,9 @@ export default defineManifest((env) => {
     host_permissions: ["*://*.youtube.com/*"],
     content_scripts: [
       {
-        matches: ["*://*.youtube.com/playlist?list=*"],
+        matches: ["*://*.youtube.com/*"],
         js: ["src/content/index.ts"],
+        run_at: "document_idle",
       },
     ],
     ...(isFirefox && {

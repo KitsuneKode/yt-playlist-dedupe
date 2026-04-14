@@ -1,7 +1,5 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Play, Trash2, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +17,6 @@ interface DuplicateItem {
 }
 
 export default function App() {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ScanStatus>("idle");
   const [isPlaylistPage, setIsPlaylistPage] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateItem[]>([]);
@@ -34,59 +31,32 @@ export default function App() {
     });
   }, []);
 
-  useGSAP(
-    () => {
-      // Animate elements based on status changes
-      if (status === "idle") {
-        gsap.fromTo(
-          ".idle-view",
-          { opacity: 0, y: 10 },
-          { opacity: 1, y: 0, duration: 0.2, ease: "power3.out" },
-        );
-      } else if (status === "scanning") {
-        gsap.fromTo(
-          ".scanning-view",
-          { opacity: 0, scale: 0.95 },
-          { opacity: 1, scale: 1, duration: 0.2, ease: "power3.out" },
-        );
-      } else if (status === "ready" || status === "deleting" || status === "done") {
-        gsap.fromTo(
-          ".results-view",
-          { opacity: 0, y: 10 },
-          { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" },
-        );
-
-        if (duplicates.length > 0 && status === "ready") {
-          gsap.fromTo(
-            ".duplicate-item",
-            { opacity: 0, x: -8 },
-            { opacity: 1, x: 0, duration: 0.3, stagger: 0.02, ease: "power3.out" },
-          );
-        }
-
-        if (status === "done") {
-          gsap.fromTo(
-            ".done-view",
-            { opacity: 0, y: 10 },
-            { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" },
-          );
-        }
-      }
-    },
-    { dependencies: [status, duplicates.length], scope: containerRef },
-  );
-
   const handleScan = async () => {
     setStatus("scanning");
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.id) return;
+    if (!tab.id) {
+      setStatus("idle");
+      return;
+    }
 
     try {
-      const response = await chrome.tabs.sendMessage(tab.id, { action: "SCAN_DOM" });
-      setDuplicates(response.duplicates || []);
-      setStatus("ready");
-    } catch {
+      const response = await Promise.race([
+        chrome.tabs.sendMessage(tab.id!, { action: "SCAN_DOM" }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Scan timed out")), 10000),
+        ),
+      ]);
+
+      if (response && typeof response === "object" && "duplicates" in response) {
+        setDuplicates((response as any).duplicates || []);
+        setStatus("ready");
+      } else {
+        console.error("[YT-DDP] Invalid response from content script:", response);
+        setStatus("idle");
+      }
+    } catch (err) {
+      console.error("[YT-DDP] Scan failed:", err);
       setStatus("idle");
     }
   };
@@ -96,22 +66,40 @@ export default function App() {
     setDeletedCount(0);
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.id) return;
+    if (!tab.id) {
+      setStatus("idle");
+      return;
+    }
+
+    const listener = (msg: any) => {
+      if (msg.action === "DELETE_PROGRESS") {
+        setDeletedCount(msg.count);
+      } else if (msg.action === "DELETE_COMPLETE") {
+        setStatus("done");
+        chrome.runtime.onMessage.removeListener(listener);
+      }
+    };
 
     try {
-      chrome.runtime.onMessage.addListener(function listener(msg) {
-        if (msg.action === "DELETE_PROGRESS") {
-          setDeletedCount(msg.count);
-        } else if (msg.action === "DELETE_COMPLETE") {
-          setStatus("done");
-          chrome.runtime.onMessage.removeListener(listener);
-        }
-      });
+      chrome.runtime.onMessage.addListener(listener);
 
-      await chrome.tabs.sendMessage(tab.id, { action: "EXECUTE_DELETE", items: duplicates });
-    } catch {
+      await Promise.race([
+        chrome.tabs.sendMessage(tab.id!, { action: "EXECUTE_DELETE", items: duplicates }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Delete timed out")), 60000),
+        ),
+      ]);
+    } catch (err) {
+      console.error("[YT-DDP] Delete failed:", err);
+      chrome.runtime.onMessage.removeListener(listener);
       setStatus("idle");
     }
+  };
+
+  const handleReset = () => {
+    setStatus("idle");
+    setDuplicates([]);
+    setDeletedCount(0);
   };
 
   if (!isPlaylistPage) {
@@ -129,7 +117,7 @@ export default function App() {
   const progressPercentage = duplicates.length > 0 ? (deletedCount / duplicates.length) * 100 : 0;
 
   return (
-    <div className="flex flex-col h-full bg-background p-4" ref={containerRef}>
+    <div className="flex flex-col h-full bg-background p-4">
       <Card className="flex flex-col h-full overflow-hidden border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl">
         <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0 shrink-0">
           <div className="flex items-center space-x-3">
@@ -156,7 +144,7 @@ export default function App() {
 
         <CardContent className="flex-1 overflow-hidden flex flex-col p-4 relative">
           {status === "idle" && (
-            <div className="idle-view flex flex-col items-center justify-center h-full space-y-6">
+            <div className="flex flex-col items-center justify-center h-full space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
               <div className="text-center space-y-2">
                 <h2 className="text-lg font-medium text-foreground">Ready to Scan</h2>
                 <p className="text-sm text-muted-foreground max-w-[250px] mx-auto leading-relaxed">
@@ -171,14 +159,14 @@ export default function App() {
           )}
 
           {status === "scanning" && (
-            <div className="scanning-view flex flex-col items-center justify-center h-full space-y-4">
+            <div className="flex flex-col items-center justify-center h-full space-y-4 animate-in fade-in zoom-in-95 duration-200">
               <RefreshCw className="size-8 text-primary animate-spin" />
               <p className="text-sm font-medium text-muted-foreground">Scanning DOM Elements...</p>
             </div>
           )}
 
           {(status === "ready" || status === "deleting" || status === "done") && (
-            <div className="results-view flex flex-col h-full space-y-4">
+            <div className="flex flex-col h-full space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="grid grid-cols-2 gap-3 shrink-0">
                 <div className="p-3 rounded-xl bg-secondary/50 border border-border/50 flex flex-col items-center justify-center text-center">
                   <span className="text-2xl font-bold text-emerald-500 tracking-tighter tabular-nums leading-none">
@@ -209,10 +197,11 @@ export default function App() {
                     <div className="p-2 space-y-1">
                       {duplicates.map((dup, i) => (
                         <div
-                          key={dup.id + i}
-                          className="duplicate-item flex items-center space-x-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors group opacity-0"
+                          key={dup.id}
+                          className="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-muted/50 transition-all duration-200 animate-in fade-in slide-in-from-left-2"
+                          style={{ animationDelay: `${i * 20}ms`, animationFillMode: "backwards" }}
                         >
-                          <div className="size-1.5 rounded-full bg-destructive shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-200" />
+                          <div className="size-1.5 rounded-full bg-destructive shrink-0 opacity-40 hover:opacity-100 transition-opacity duration-200" />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-foreground truncate font-medium leading-tight">
                               {dup.title}
@@ -240,7 +229,7 @@ export default function App() {
 
         {duplicates.length > 0 &&
           (status === "ready" || status === "deleting" || status === "done") && (
-            <div className="results-view shrink-0">
+            <div className="shrink-0 animate-in fade-in slide-in-from-bottom-2 duration-300">
               <CardFooter className="pt-0 pb-4 px-4 flex flex-col gap-3">
                 {status === "deleting" && (
                   <div className="w-full space-y-1.5">
@@ -255,9 +244,22 @@ export default function App() {
                 )}
 
                 {status === "done" ? (
-                  <div className="done-view w-full flex items-center justify-center p-3 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 opacity-0">
-                    <CheckCircle2 className="size-5 mr-2" />
-                    <span className="font-semibold text-sm tracking-tight">Successfully Nuked</span>
+                  <div className="w-full flex flex-col items-center justify-center p-3 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 animate-in fade-in slide-in-from-bottom-2 duration-300 gap-2">
+                    <div className="flex items-center">
+                      <CheckCircle2 className="size-5 mr-2" />
+                      <span className="font-semibold text-sm tracking-tight">
+                        Successfully Nuked
+                      </span>
+                    </div>
+                    <Button
+                      onClick={handleReset}
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs mt-1"
+                    >
+                      <RefreshCw className="size-3 mr-1.5" data-icon="inline-start" />
+                      Scan Again
+                    </Button>
                   </div>
                 ) : (
                   <Button

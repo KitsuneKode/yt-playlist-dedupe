@@ -2,13 +2,20 @@
 
 console.log("[YT-DDP] Content script loaded and active.");
 
+let isExecuting = false;
+let stopExecution = false;
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log("[YT-DDP] Message received:", request.action);
 
   if (request.action === "SCAN_DOM") {
+    if (!window.location.href.includes("youtube.com/playlist")) {
+      sendResponse({ duplicates: [], totalScanned: 0, error: "Not on a playlist page" });
+      return;
+    }
+
     try {
       const results = scanForDuplicates();
-      console.log("[YT-DDP] Scan results:", results);
       sendResponse(results);
     } catch (error) {
       console.error("[YT-DDP] Scan failed:", error);
@@ -17,35 +24,83 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "SCROLL_TO_BOTTOM") {
+    scrollToBottom()
+      .then((count) => sendResponse({ count }))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (request.action === "STOP_EXECUTION") {
+    stopExecution = true;
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (request.action === "EXECUTE_DELETE") {
-    executeDeletions(request.items)
+    if (isExecuting) {
+      sendResponse({ ok: false, error: "Execution already in progress" });
+      return;
+    }
+
+    if (!window.location.href.includes("youtube.com/playlist")) {
+      sendResponse({ ok: false, error: "Not on a playlist page" });
+      return;
+    }
+
+    isExecuting = true;
+    stopExecution = false;
+
+    executeDeletions(request.items, request.options || { speed: "normal" })
       .then(() => {
-        console.log("[YT-DDP] All deletions completed.");
+        console.log("[YT-DDP] Deletion process finished.");
+        isExecuting = false;
         sendResponse({ ok: true });
       })
       .catch((err) => {
         console.error("[YT-DDP] Execution failed:", err);
+        isExecuting = false;
         sendResponse({ ok: false, error: err.message });
       });
     return true;
   }
 });
 
+async function scrollToBottom() {
+  let lastCount = 0;
+  let stagnantCount = 0;
+
+  while (stagnantCount < 3) {
+    const items = document.querySelectorAll(
+      "ytd-playlist-video-renderer, ytd-playlist-panel-video-renderer",
+    );
+    if (items.length === lastCount) {
+      stagnantCount++;
+    } else {
+      stagnantCount = 0;
+    }
+    lastCount = items.length;
+
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await new Promise((r) => setTimeout(r, 1500)); // Wait for lazy load
+
+    // Check if we reached the end (spinner gone or similar)
+    const spinner = document.querySelector("ytd-continuation-item-renderer #spinner");
+    if (!spinner && stagnantCount > 0) break;
+  }
+
+  return lastCount;
+}
+
 function scanForDuplicates() {
-  // Broaden selector to find all playlist items
   const items = Array.from(
     document.querySelectorAll("ytd-playlist-video-renderer, ytd-playlist-panel-video-renderer"),
   );
 
-  if (items.length === 0) {
-    console.warn("[YT-DDP] No playlist items found in DOM. Check if you are on a playlist page.");
-  }
-
-  const seenVideos = new Set();
+  const seenVideos = new Map<string, { index: number; title: string }>();
   const duplicates: any[] = [];
 
   items.forEach((item, index) => {
-    // Try multiple ways to find the video ID
     const anchor = item.querySelector(
       "a#thumbnail, a.ytd-playlist-video-renderer",
     ) as HTMLAnchorElement;
@@ -64,6 +119,7 @@ function scanForDuplicates() {
       const title = titleEl ? titleEl.textContent?.trim() || "Unknown Title" : "Unknown Title";
 
       if (seenVideos.has(videoId)) {
+        const original = seenVideos.get(videoId)!;
         const uniqueId = `dup_${videoId}_${index}`;
         item.setAttribute("data-yt-ddp-id", uniqueId);
 
@@ -72,9 +128,10 @@ function scanForDuplicates() {
           videoId,
           title,
           index: index + 1,
+          originalIndex: original.index,
         });
       } else {
-        seenVideos.add(videoId);
+        seenVideos.set(videoId, { index: index + 1, title });
       }
     } catch (e) {
       console.error("[YT-DDP] Error parsing item:", e);
@@ -84,56 +141,128 @@ function scanForDuplicates() {
   return { duplicates, totalScanned: items.length };
 }
 
-async function executeDeletions(items: any[]) {
+async function waitForElement(selector: string, timeout = 2000): Promise<HTMLElement | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const el = document.querySelector(selector) as HTMLElement;
+    if (el && el.offsetParent !== null) return el;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
+
+async function waitForElementByText(
+  selector: string,
+  text: string,
+  timeout = 2000,
+): Promise<HTMLElement | null> {
+  const start = Date.now();
+  const lowerText = text.toLowerCase();
+  while (Date.now() - start < timeout) {
+    const elements = Array.from(document.querySelectorAll(selector));
+    for (const el of elements) {
+      if (el.textContent?.toLowerCase().includes(lowerText)) {
+        return el as HTMLElement;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
+
+async function executeDeletions(items: any[], options: { speed: string }) {
   let deletedCount = 0;
+  const speedDelays =
+    {
+      fast: { min: 200, max: 400, menuWait: 200 },
+      normal: { min: 500, max: 1000, menuWait: 400 },
+      safe: { min: 1200, max: 2500, menuWait: 800 },
+    }[options.speed as keyof typeof speedDelays] || speedDelays.normal;
 
   for (const dup of items) {
+    if (stopExecution) {
+      console.log("[YT-DDP] Execution stopped by user.");
+      break;
+    }
+
     const element = document.querySelector(`[data-yt-ddp-id="${dup.id}"]`);
     if (!element) {
       console.warn("[YT-DDP] Could not find element to delete:", dup.id);
+      chrome.runtime.sendMessage({
+        action: "DELETE_PROGRESS",
+        count: deletedCount,
+        currentTitle: dup.title,
+        status: "failed",
+        error: "Element not found",
+      });
       continue;
     }
 
     try {
-      // Find the menu button - broaden selector
+      chrome.runtime.sendMessage({
+        action: "DELETE_PROGRESS",
+        count: deletedCount,
+        currentTitle: dup.title,
+        status: "processing",
+      });
+
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      await new Promise((r) => setTimeout(r, 300));
+
       const menuBtn = element.querySelector(
-        "yt-icon-button.ytd-menu-renderer button, button[aria-label='Action menu']",
+        "#button > yt-icon-button, yt-icon-button#button, [aria-label='More actions'], ytd-menu-renderer button",
       ) as HTMLElement;
+
       if (!menuBtn) {
-        console.error("[YT-DDP] Action menu button not found for item:", dup.title);
-        continue;
+        throw new Error("Action menu button not found");
       }
 
       menuBtn.click();
 
-      // Wait for menu to appear
-      await new Promise((r) => setTimeout(r, 300));
-
-      // Find "Remove from..." menu item
-      const menuItems = Array.from(
-        document.querySelectorAll("ytd-menu-service-item-renderer, tp-yt-paper-item"),
+      // Wait for menu with smarter logic
+      const removeBtn = await waitForElementByText(
+        "ytd-menu-service-item-renderer, tp-yt-paper-item, ytd-menu-navigation-item-renderer",
+        "remove from",
       );
-      const removeBtn = menuItems.find((el) => {
-        const text = el.textContent?.toLowerCase() || "";
-        return text.includes("remove from") || text.includes("delete from");
-      }) as HTMLElement;
 
-      if (removeBtn) {
-        removeBtn.click();
-        deletedCount++;
-        console.log(`[YT-DDP] Removed: ${dup.title}`);
-        chrome.runtime.sendMessage({ action: "DELETE_PROGRESS", count: deletedCount });
+      if (!removeBtn) {
+        // Fallback for some languages or UI variants
+        const fallbackBtn = await waitForElementByText(
+          "ytd-menu-service-item-renderer, tp-yt-paper-item",
+          "delete from",
+        );
+        if (!fallbackBtn) throw new Error("'Remove from' button not found in menu");
+        fallbackBtn.click();
       } else {
-        console.warn("[YT-DDP] 'Remove' button not found in menu.");
-        document.body.click(); // Close menu
+        removeBtn.click();
       }
 
+      deletedCount++;
+      chrome.runtime.sendMessage({
+        action: "DELETE_PROGRESS",
+        count: deletedCount,
+        currentTitle: dup.title,
+        status: "success",
+      });
+
       // Human-like delay
-      await new Promise((r) => setTimeout(r, 500 + Math.random() * 500));
-    } catch (error) {
-      console.error("[YT-DDP] Error during deletion step:", error);
+      const delay = speedDelays.min + Math.random() * (speedDelays.max - speedDelays.min);
+      await new Promise((r) => setTimeout(r, delay));
+    } catch (error: any) {
+      console.error("[YT-DDP] Error during deletion:", error);
+      chrome.runtime.sendMessage({
+        action: "DELETE_PROGRESS",
+        count: deletedCount,
+        currentTitle: dup.title,
+        status: "failed",
+        error: error.message,
+      });
+
+      // Close menu on error
+      document.body.click();
+      await new Promise((r) => setTimeout(r, 300));
     }
   }
 
-  chrome.runtime.sendMessage({ action: "DELETE_COMPLETE" });
+  chrome.runtime.sendMessage({ action: "DELETE_COMPLETE", total: deletedCount });
 }
