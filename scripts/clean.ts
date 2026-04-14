@@ -4,34 +4,41 @@ import { Glob } from "bun";
 
 const rootDir = process.cwd();
 
-// A single unified pattern for root and nested workspace directories
-const cleanPattern =
-  "{node_modules,.turbo,.next,coverage,.cache,{apps,packages}/*/{node_modules,dist,out,build,.next,.turbo,coverage,.cache}}";
+// Two separate patterns — Bun's Glob does not support nested brace expansion,
+// so a single combined pattern like "{...,{apps,packages}/*/{...}}" silently matches nothing.
+const cleanPatterns = [
+  // Root-level artifact dirs
+  "{node_modules,.turbo,.next,coverage,.cache}",
+  // Workspace package artifact dirs (apps/* and packages/*)
+  "{apps,packages}/*/{node_modules,dist,out,build,.next,.turbo,coverage,.cache}",
+];
 
 console.log("🚀 Starting blazing fast deep clean...");
 const startTime = performance.now();
 
 async function runDeepClean() {
-  const glob = new Glob(cleanPattern);
   const deletePromises: Promise<string | null>[] = [];
   const trackedPaths = new Set<string>();
 
-  // Scan and initiate deletions immediately as matches are found
-  for await (const match of glob.scan({ cwd: rootDir, onlyFiles: false, dot: true })) {
-    if (trackedPaths.has(match)) continue;
-    trackedPaths.add(match);
+  // Scan each pattern — Bun Glob doesn't support nested braces, so we use separate patterns
+  for (const pattern of cleanPatterns) {
+    const glob = new Glob(pattern);
+    for await (const match of glob.scan({ cwd: rootDir, onlyFiles: false, dot: true })) {
+      if (trackedPaths.has(match)) continue;
+      trackedPaths.add(match);
 
-    const fullPath = join(rootDir, match);
+      const fullPath = join(rootDir, match);
 
-    // We start the promise immediately but track it to wait later
-    const p = rm(fullPath, { recursive: true, force: true })
-      .then(() => match)
-      .catch((err) => {
-        console.error(`  ❌ Failed to clean ${match}:`, err.message);
-        return null;
-      });
+      // We start the promise immediately but track it to wait later
+      const p = rm(fullPath, { recursive: true, force: true })
+        .then(() => match)
+        .catch((err) => {
+          console.error(`  ❌ Failed to clean ${match}:`, err.message);
+          return null;
+        });
 
-    deletePromises.push(p);
+      deletePromises.push(p);
+    }
   }
 
   const results = await Promise.all(deletePromises);

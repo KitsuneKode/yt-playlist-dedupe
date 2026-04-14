@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("popup renders not a playlist state correctly", async ({ page }) => {
+test("popup renders not a playlist state correctly", async ({ page: _page }) => {
   // A real extension test would use chromium.launchPersistentContext
   // with the extension loaded, but for the basic E2E, we can test the
   // component in isolation or just assert the logic if hosted.

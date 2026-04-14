@@ -1,6 +1,6 @@
 import { defineManifest } from "@crxjs/vite-plugin";
 
-export default defineManifest((env) => {
+export default defineManifest((_env) => {
   const isFirefox = process.env.TARGET_BROWSER === "firefox";
 
   return {

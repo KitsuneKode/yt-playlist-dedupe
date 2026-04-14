@@ -9,6 +9,9 @@
     "lint": {
       "dependsOn": []
     },
+    "typecheck": {
+      "dependsOn": []
+    },
     "format": {
       "dependsOn": []
     },
@@ -16,7 +19,7 @@
       "dependsOn": []
     },
     "check": {
-      "dependsOn": ["lint", "test"]
+      "dependsOn": ["lint", "typecheck", "test"]
     },
     "clean": {
       "cache": false

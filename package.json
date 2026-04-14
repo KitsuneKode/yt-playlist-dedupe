@@ -12,6 +12,8 @@
     "clean": "bun run scripts/clean.ts",
     "test": "turbo run test --ui=tui",
     "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "typecheck": "turbo run typecheck",
     "format": "oxfmt .",
     "check": "turbo run check --ui=tui",
     "prepare": "husky"

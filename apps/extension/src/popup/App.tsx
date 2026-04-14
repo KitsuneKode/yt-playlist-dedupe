@@ -6,9 +6,7 @@ import {
   AlertCircle,
   RefreshCw,
   MousePointer2,
-  Settings2,
   Square,
-  ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 

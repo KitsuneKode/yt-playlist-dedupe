@@ -163,16 +163,6 @@ function scanForDuplicates() {
   return { duplicates, totalScanned: items.length };
 }
 
-async function waitForElement(selector: string, timeout = 2000): Promise<HTMLElement | null> {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    const el = document.querySelector(selector) as HTMLElement;
-    if (el && el.offsetParent !== null) return el;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  return null;
-}
-
 async function waitForElementByText(
   selector: string,
   text: string,
@@ -194,12 +184,14 @@ async function waitForElementByText(
 
 async function executeDeletions(items: any[], options: { speed: string }) {
   let deletedCount = 0;
+  const speedConfigs = {
+    fast: { min: 200, max: 400, menuWait: 200 },
+    normal: { min: 500, max: 1000, menuWait: 400 },
+    safe: { min: 1200, max: 2500, menuWait: 800 },
+  };
+
   const speedDelays =
-    {
-      fast: { min: 200, max: 400, menuWait: 200 },
-      normal: { min: 500, max: 1000, menuWait: 400 },
-      safe: { min: 1200, max: 2500, menuWait: 800 },
-    }[options.speed as keyof typeof speedDelays] || speedDelays.normal;
+    speedConfigs[options.speed as keyof typeof speedConfigs] || speedConfigs.normal;
 
   for (const dup of items) {
     if (stopExecution) {

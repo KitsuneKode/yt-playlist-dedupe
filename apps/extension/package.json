@@ -10,6 +10,7 @@
     "build:firefox": "TARGET_BROWSER=firefox vite build",
     "zip": "bun run scripts/zip.ts",
     "lint": "oxlint src",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "playwright test"
   },
