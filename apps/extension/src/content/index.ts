@@ -70,23 +70,45 @@ async function scrollToBottom() {
   let lastCount = 0;
   let stagnantCount = 0;
 
-  while (stagnantCount < 3) {
+  while (stagnantCount < 5) {
     const items = document.querySelectorAll(
       "ytd-playlist-video-renderer, ytd-playlist-panel-video-renderer",
     );
-    if (items.length === lastCount) {
+    const currentCount = items.length;
+
+    if (currentCount === lastCount) {
       stagnantCount++;
     } else {
       stagnantCount = 0;
+      lastCount = currentCount;
     }
-    lastCount = items.length;
 
     window.scrollTo(0, document.documentElement.scrollHeight);
-    await new Promise((r) => setTimeout(r, 1500)); // Wait for lazy load
 
-    // Check if we reached the end (spinner gone or similar)
-    const spinner = document.querySelector("ytd-continuation-item-renderer #spinner");
-    if (!spinner && stagnantCount > 0) break;
+    // Wait for either the count to change or a timeout
+    const waitStart = Date.now();
+    let countChanged = false;
+    while (Date.now() - waitStart < 2000) {
+      const newCount = document.querySelectorAll(
+        "ytd-playlist-video-renderer, ytd-playlist-panel-video-renderer",
+      ).length;
+      if (newCount > currentCount) {
+        countChanged = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    if (!countChanged && stagnantCount >= 3) {
+      // One last check if the spinner is gone
+      const spinner = document.querySelector(
+        "ytd-continuation-item-renderer tp-yt-paper-spinner, #spinner",
+      );
+      if (!spinner) break;
+    }
+
+    // Extra safety wait for DOM to settle
+    await new Promise((r) => setTimeout(r, 300));
   }
 
   return lastCount;

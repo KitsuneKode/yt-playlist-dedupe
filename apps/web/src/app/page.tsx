@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   Terminal,
   Chrome,
@@ -13,10 +13,13 @@ import {
   PlayCircle,
   Lock,
   Gauge,
+  Copy,
+  Check,
 } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
+import Link from "next/link";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
@@ -28,6 +31,13 @@ const GithubIcon = () => (
 
 export default function Home() {
   const container = useRef<HTMLDivElement>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   useGSAP(
     () => {
@@ -70,7 +80,12 @@ export default function Home() {
           });
         });
         btn.addEventListener("mouseleave", () => {
-          gsap.to(btn, { x: 0, y: 0, duration: 0.6, ease: "elastic.out(1, 0.3)" });
+          gsap.to(btn, {
+            x: 0,
+            y: 0,
+            duration: 0.6,
+            ease: "elastic.out(1, 0.3)",
+          });
         });
       });
 
@@ -142,32 +157,37 @@ export default function Home() {
 
         <div className="hidden lg:flex gap-12 font-mono text-[10px] font-black uppercase tracking-[0.3em]">
           {["Experience", "Capability", "CLI", "FAQ"].map((item) => (
-            <a
-              key={item}
-              href={`#${item.toLowerCase()}`}
-              className="nav-item hover:text-brutal-accent transition-all hover:scale-110"
-            >
-              {item}
-            </a>
+            <div key={item} className="nav-item">
+              <Link
+                href={`#${item.toLowerCase()}`}
+                className="hover:text-brutal-accent transition-all hover:scale-110 block"
+              >
+                {item}
+              </Link>
+            </div>
           ))}
         </div>
 
         <div className="flex items-center gap-6">
-          <a
-            href="https://github.com/KitsuneKode/yt-playlist-dedupe"
-            target="_blank"
-            rel="noreferrer"
-            className="nav-item hidden md:flex items-center gap-2 hover:bg-brutal-fg hover:text-brutal-bg border-thick px-5 py-2.5 transition-all font-mono text-xs font-black uppercase"
-          >
-            <GithubIcon />
-            <span>Repository</span>
-          </a>
-          <a
-            href="#install"
-            className="nav-item border-thick bg-brutal-accent text-white px-8 py-2.5 font-display text-2xl uppercase tracking-wider hover:bg-brutal-fg hover:text-brutal-bg transition-all brutal-shadow-sm hover:brutal-shadow"
-          >
-            Deploy
-          </a>
+          <div className="nav-item hidden md:block">
+            <Link
+              href="https://github.com/KitsuneKode/yt-playlist-dedupe"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 hover:bg-brutal-fg hover:text-brutal-bg border-thick px-5 py-2.5 transition-all font-mono text-xs font-black uppercase"
+            >
+              <GithubIcon />
+              <span>Repository</span>
+            </Link>
+          </div>
+          <div className="nav-item">
+            <Link
+              href="#cli"
+              className="inline-block border-thick bg-brutal-accent text-white px-8 py-2.5 font-display text-2xl uppercase tracking-wider hover:bg-brutal-fg hover:text-brutal-bg transition-all brutal-shadow-sm hover:brutal-shadow"
+            >
+              Deploy
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -186,17 +206,17 @@ export default function Home() {
           </div>
 
           <h1 className="font-display text-[clamp(4rem,15vw,12rem)] leading-[0.8] tracking-tighter uppercase font-black mb-14 text-brutal-fg">
-            <div className="overflow-hidden py-2">
-              <div className="hero-title-part">Nuke the</div>
-            </div>
-            <div className="overflow-hidden py-2">
-              <div className="hero-title-part text-stroke-thick hover:text-brutal-fg transition-colors duration-500 italic">
+            <span className="block overflow-hidden py-2">
+              <span className="block hero-title-part">Nuke the</span>
+            </span>
+            <span className="block overflow-hidden py-2">
+              <span className="block hero-title-part text-stroke-thick hover:text-brutal-fg transition-colors duration-500 italic">
                 Duplicates.
-              </div>
-            </div>
-            <div className="overflow-hidden py-2">
-              <div className="hero-title-part text-brutal-accent">Own your library.</div>
-            </div>
+              </span>
+            </span>
+            <span className="block overflow-hidden py-2">
+              <span className="block hero-title-part text-brutal-accent">Own your library.</span>
+            </span>
           </h1>
 
           <p className="hero-desc text-2xl md:text-4xl max-w-4xl font-medium leading-tight mb-20 font-mono tracking-tight text-brutal-fg/80">
@@ -208,14 +228,20 @@ export default function Home() {
           </p>
 
           <div className="hero-cta flex flex-wrap justify-center gap-10">
-            <button className="magnetic-btn bg-brutal-fg text-white border-thick px-14 py-7 font-display text-4xl uppercase tracking-tighter hover:bg-brutal-accent transition-all brutal-shadow hover:brutal-shadow-hover group flex items-center gap-6">
+            <Link
+              href="#capability"
+              className="magnetic-btn bg-brutal-fg text-white border-thick px-14 py-7 font-display text-4xl uppercase tracking-tighter hover:bg-brutal-accent transition-all brutal-shadow hover:brutal-shadow-hover group flex items-center gap-6 inline-block cursor-pointer"
+            >
               <span>Browser Extension</span>
-              <Chrome className="size-10 group-hover:rotate-12 transition-transform" />
-            </button>
-            <button className="magnetic-btn bg-white text-brutal-fg border-thick px-14 py-7 font-display text-4xl uppercase tracking-tighter hover:bg-brutal-accent2 transition-all brutal-shadow hover:brutal-shadow-hover group flex items-center gap-6">
+              <Chrome className="size-10 group-hover:rotate-12 transition-transform inline-block" />
+            </Link>
+            <Link
+              href="#cli"
+              className="magnetic-btn bg-white text-brutal-fg border-thick px-14 py-7 font-display text-4xl uppercase tracking-tighter hover:bg-brutal-accent2 transition-all brutal-shadow hover:brutal-shadow-hover group flex items-center gap-6 inline-block cursor-pointer"
+            >
               <span>Developer CLI</span>
-              <Terminal className="size-10 group-hover:translate-x-2 transition-transform" />
-            </button>
+              <Terminal className="size-10 group-hover:translate-x-2 transition-transform inline-block" />
+            </Link>
           </div>
         </section>
 
@@ -324,7 +350,7 @@ export default function Home() {
             ].map((step, i) => (
               <div
                 key={i}
-                className="manual-step p-12 bg-white border-thick md:border-r-0 last:border-r-thick group hover:bg-brutal-fg hover:text-white transition-all duration-500 cursor-help"
+                className="manual-step p-12 bg-white border-thick md:border-r-0 last:border-r-thick group hover:bg-brutal-fg hover:text-white transition-colors duration-500 cursor-help"
               >
                 <div className="mb-16 flex justify-between items-start">
                   <div className="p-4 bg-brutal-bg border-thick group-hover:bg-brutal-accent transition-colors">
@@ -364,10 +390,22 @@ export default function Home() {
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-10">
                 {[
-                  { title: "JSON Output", desc: "Pipe results into your custom tools." },
-                  { title: "Smart Cache", desc: "24h persistence with PT reset." },
-                  { title: "Quota Guard", desc: "Proactive limit interception." },
-                  { title: "OAuth2 Secure", desc: "Industry standard authorization." },
+                  {
+                    title: "JSON Output",
+                    desc: "Pipe results into your custom tools.",
+                  },
+                  {
+                    title: "Smart Cache",
+                    desc: "24h persistence with PT reset.",
+                  },
+                  {
+                    title: "Quota Guard",
+                    desc: "Proactive limit interception.",
+                  },
+                  {
+                    title: "OAuth2 Secure",
+                    desc: "Industry standard authorization.",
+                  },
                 ].map((item, i) => (
                   <div key={i} className="flex gap-5 items-start text-white">
                     <CheckCircle2 className="size-8 text-brutal-accent2 shrink-0 mt-1" />
@@ -397,32 +435,62 @@ export default function Home() {
                     </span>
                   </div>
                   <div className="font-mono text-lg md:text-2xl text-brutal-accent2 space-y-8">
-                    <div className="space-y-2">
-                      <p className="text-white/30 text-sm italic font-medium tracking-tight uppercase">
+                    <div
+                      className="group cursor-pointer relative hover:bg-white/5 p-4 -ml-4 rounded-lg transition-colors border border-transparent hover:border-white/10"
+                      onClick={() => handleCopy("npm install -g @kitsunekode/yt-ddp", "install")}
+                    >
+                      <p className="text-[10px] text-brutal-fg/40 group-hover:text-brutal-fg/60 font-black uppercase tracking-[0.2em] mb-2 transition-colors">
                         # install globally
                       </p>
-                      <p className="font-black tracking-tight flex items-center gap-4 text-white">
+                      <p className="font-black tracking-tight flex items-center gap-4 text-white group-hover:text-white/90 transition-colors">
                         <span className="text-white opacity-50 select-none">$</span>
                         <span>npm install -g @kitsunekode/yt-ddp</span>
                       </p>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {copiedId === "install" ? (
+                          <Check className="size-5 text-brutal-accent2" />
+                        ) : (
+                          <Copy className="size-5 text-white/40 hover:text-white transition-colors" />
+                        )}
+                      </div>
                     </div>
-                    <div className="space-y-2 pt-4">
-                      <p className="text-white/30 text-sm italic font-medium tracking-tight uppercase">
+                    <div
+                      className="group cursor-pointer relative hover:bg-white/5 p-4 -ml-4 rounded-lg transition-colors border border-transparent hover:border-white/10"
+                      onClick={() => handleCopy("yt-ddp setup", "setup")}
+                    >
+                      <p className="text-[10px] text-brutal-fg/40 group-hover:text-brutal-fg/60 font-black uppercase tracking-[0.2em] mb-2 transition-colors">
                         # initialize security layer
                       </p>
-                      <p className="font-black tracking-tight flex items-center gap-4 text-white">
+                      <p className="font-black tracking-tight flex items-center gap-4 text-white group-hover:text-white/90 transition-colors">
                         <span className="text-white opacity-50 select-none">$</span>
                         <span>yt-ddp setup</span>
                       </p>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {copiedId === "setup" ? (
+                          <Check className="size-5 text-brutal-accent2" />
+                        ) : (
+                          <Copy className="size-5 text-white/40 hover:text-white transition-colors" />
+                        )}
+                      </div>
                     </div>
-                    <div className="space-y-2 pt-4">
-                      <p className="text-white/30 text-sm italic font-medium tracking-tight uppercase">
+                    <div
+                      className="group cursor-pointer relative hover:bg-white/5 p-4 -ml-4 rounded-lg transition-colors border border-transparent hover:border-white/10"
+                      onClick={() => handleCopy("yt-ddp PLAYLIST_URL --execute", "execute")}
+                    >
+                      <p className="text-[10px] text-brutal-fg/40 group-hover:text-brutal-fg/60 font-black uppercase tracking-[0.2em] mb-2 transition-colors">
                         # execute full sweep
                       </p>
                       <p className="font-black tracking-tight flex items-center gap-4 text-white text-brutal-accent2">
                         <span className="text-white opacity-50 select-none">$</span>
                         <span>yt-ddp PLAYLIST_URL --execute</span>
                       </p>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {copiedId === "execute" ? (
+                          <Check className="size-5 text-brutal-accent2" />
+                        ) : (
+                          <Copy className="size-5 text-brutal-accent2/40 hover:text-brutal-accent2 transition-colors" />
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -453,10 +521,10 @@ export default function Home() {
             />
             <FAQItem
               question="Which browsers are supported?"
-              answer="The suite is built on the Manifest V3 architecture, ensuring native support for Chrome, Edge, Brave, Arc, Vivaldi, and any Chromium-based browser. We also provide a specialized build for Mozilla Firefox."
+              answer="The suite is built on the Manifest V3 architecture, ensuring native support for Chrome, Edge, Brave, Arc, Vivaldi, and any Chromium-based browser. We also provide Link specialized build for Mozilla Firefox."
             />
             <FAQItem
-              question="Can I automate this on a server?"
+              question="Can I automate this on Link server?"
               answer="Precisely. The CLI package is built for server environments. It supports headless execution, JSON logging, and persistent caching, making it the ideal choice for scheduled deduplication tasks in CI/CD or Linux cron environments."
             />
           </div>
@@ -498,61 +566,61 @@ export default function Home() {
               <div className="text-brutal-accent2 mb-12 flex items-center gap-3 underline decoration-2 underline-offset-8">
                 Navigation
               </div>
-              <a href="#" className="block hover:text-brutal-accent transition-colors">
+              <Link href="#" className="block hover:text-brutal-accent transition-colors">
                 Home
-              </a>
-              <a
+              </Link>
+              <Link
                 href="#experience"
                 className="block hover:text-brutal-accent transition-colors tracking-tighter"
               >
                 Experience Hub
-              </a>
-              <a
+              </Link>
+              <Link
                 href="#cli"
                 className="block hover:text-brutal-accent transition-colors tracking-tighter"
               >
                 Technical Tooling
-              </a>
+              </Link>
             </div>
             <div className="space-y-8 font-mono text-xs font-black uppercase tracking-[0.2em]">
               <div className="text-brutal-accent2 mb-12 flex items-center gap-3 underline decoration-2 underline-offset-8">
                 Resources
               </div>
-              <a
+              <Link
                 href="https://github.com/KitsuneKode/yt-playlist-dedupe"
                 className="block hover:text-brutal-accent transition-all flex items-center gap-3 group"
               >
                 <GithubIcon /> <span>Github Src</span>
-              </a>
-              <a
+              </Link>
+              <Link
                 href="https://www.npmjs.com/package/@kitsunekode/yt-ddp"
                 className="block hover:text-brutal-accent transition-colors tracking-tighter text-brutal-accent2"
               >
                 NPM Distribution
-              </a>
-              <a
+              </Link>
+              <Link
                 href="#"
                 className="block hover:text-brutal-accent transition-colors text-white/20 pointer-events-none tracking-tighter italic"
               >
                 Documentation
-              </a>
+              </Link>
             </div>
             <div className="space-y-8 font-mono text-xs font-black uppercase tracking-[0.2em]">
               <div className="text-brutal-accent2 mb-12 flex items-center gap-3 underline decoration-2 underline-offset-8">
                 Legal
               </div>
-              <a href="#" className="block hover:text-brutal-accent transition-colors">
+              <Link href="#" className="block hover:text-brutal-accent transition-colors">
                 Privacy Policy
-              </a>
-              <a
+              </Link>
+              <Link
                 href="#"
                 className="block hover:text-brutal-accent transition-colors tracking-tighter"
               >
                 Security Protocols
-              </a>
-              <a href="#" className="block hover:text-brutal-accent transition-colors">
+              </Link>
+              <Link href="#" className="block hover:text-brutal-accent transition-colors">
                 MIT License
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -572,18 +640,36 @@ export default function Home() {
 function FAQItem({ question, answer }: { question: string; answer: React.ReactNode }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<SVGSVGElement>(null);
+  const isOpen = useRef(false);
 
   const toggle = () => {
-    const isOpen = gsap.getProperty(contentRef.current, "height") !== 0;
-
-    if (isOpen) {
-      gsap.to(contentRef.current, { height: 0, autoAlpha: 0, duration: 0.6, ease: "expo.inOut" });
-      gsap.to(iconRef.current, { rotation: 0, duration: 0.5, ease: "back.out(1.7)" });
+    if (isOpen.current) {
+      gsap.to(contentRef.current, {
+        height: 0,
+        autoAlpha: 0,
+        duration: 0.6,
+        ease: "expo.inOut",
+      });
+      gsap.to(iconRef.current, {
+        rotation: 0,
+        duration: 0.5,
+        ease: "back.out(1.7)",
+      });
     } else {
-      gsap.set(contentRef.current, { height: "auto" });
-      gsap.from(contentRef.current, { height: 0, autoAlpha: 0, duration: 0.6, ease: "expo.inOut" });
-      gsap.to(iconRef.current, { rotation: 90, duration: 0.5, ease: "back.out(1.7)" });
+      gsap.set(contentRef.current, { height: "auto", autoAlpha: 1 });
+      gsap.from(contentRef.current, {
+        height: 0,
+        autoAlpha: 0,
+        duration: 0.6,
+        ease: "expo.inOut",
+      });
+      gsap.to(iconRef.current, {
+        rotation: 90,
+        duration: 0.5,
+        ease: "back.out(1.7)",
+      });
     }
+    isOpen.current = !isOpen.current;
   };
 
   return (

@@ -1,34 +1,38 @@
-# YT Dedupe
+# 🌌 YT Dedupe &middot; Playlist Deduplicator
 
-**YouTube Playlist Deduplicator** is the definitive engineering tool to clean massive YouTube playlists. 
-
-Available as a headless CLI or a native DOM-bypassing browser extension.
-
-Website: [https://ytdedupe.kitsunelabs.xyz](https://ytdedupe.kitsunelabs.xyz)
-
----
-
-## 🚀 Features
-
-- **DOM Extractor (Browser Extension)**: Reads rendered videos directly from the DOM, requiring zero OAuth setup and consuming **zero API units**. Bypasses the YouTube Data API limits completely.
-- **Quota Safe-Stop (CLI)**: YouTube caps deletions at ~198/day. Our CLI tracks a local ledger and intercepts execution before you hit 403 HTTP errors.
-- **Smart Caching (CLI)**: Playlist metadata is cached locally for 24 hours. The cache automatically invalidates at Midnight PT to match Google's quota reset.
+<div align="center">
+  <h3>The definitive engineering tool to clean massive YouTube playlists.</h3>
+  <p>Available as a headless CLI or a native DOM-bypassing browser extension.</p>
+</div>
 
 ---
+
+<br />
+
+## ✦ Features
+
+### 🧩 DOM Extractor (Browser Extension)
+Reads rendered videos directly from the DOM. Requires **zero OAuth setup** and consumes **zero API units**. Bypasses the YouTube Data API limits completely by acting as a native web client.
+
+### ⚡ Quota Safe-Stop (CLI)
+YouTube aggressively caps deletions at ~198/day per account. Our CLI tracks a local ledger and intercepts execution before you hit `403 Forbidden` HTTP errors, keeping your API project safe from shadowbans.
+
+### 🧠 Smart Caching (CLI)
+Playlist metadata is automatically cached locally for 24 hours. The cache is programmed to magically invalidate at Midnight PT exactly when Google's quota resets.
+
+<br />
 
 ## 📦 The CLI Package
 
-For developers, automation, and massive headless scanning.
+Built for developers, automation pipelines, and massive headless scanning.
 
 ### Installation
 
 ```bash
+# Global installation
 npm install -g @kitsunekode/yt-ddp
-```
 
-Or run once using Bun:
-
-```bash
+# Or run instantly via Bun
 bunx @kitsunekode/yt-ddp --help
 ```
 
@@ -38,7 +42,7 @@ bunx @kitsunekode/yt-ddp --help
 ```bash
 yt-ddp setup
 ```
-Follow the prompts to configure your Google Cloud project and download your OAuth credentials.
+> Follow the interactive terminal prompts to configure your Google Cloud project and inject your OAuth credentials.
 
 **2. Dry-Run Scan**
 ```bash
@@ -55,15 +59,13 @@ yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID" --execute
 yt-ddp quota
 ```
 
----
+<br />
 
 ## 🧩 The Browser Extension
 
-For end-users. Nuke duplicates directly from your browser without limits.
+Built for end-users. Nuke duplicates directly from your browser without limits, API keys, or coding knowledge.
 
 ### Installation (Local Development / Unpacked)
-
-Currently, the extension is available for manual installation:
 
 #### For Google Chrome / Chromium Browsers (Edge, Brave, Arc):
 1. Clone this repository and run `bun run build` at the root.
@@ -80,21 +82,22 @@ Currently, the extension is available for manual installation:
 
 ### Usage
 1. Navigate to a YouTube playlist (e.g., `https://www.youtube.com/playlist?list=...`).
-2. Scroll to the bottom of the page to ensure all videos are rendered in the DOM.
-3. Click the **YT Dedupe** extension icon.
-4. Click **Scan Playlist**.
-5. Review the identified duplicates and click **Nuke Duplicates**.
+2. Click the **YT Dedupe** extension icon.
+3. Click **Deep Auto Scan** to let the extension scroll and read the entire stack.
+4. Review the identified duplicates and hit **Nuke Duplicates**.
 
----
+<br />
 
 ## 🛠 Development & Architecture
 
-This project is a high-performance **Turborepo** monorepo using **Bun**.
+This project is structured as a high-performance **Turborepo** monorepo using **Bun**.
 
-- `packages/core`: Framework-agnostic deduplication logic and shared types.
-- `apps/cli`: The headless NPM package that consumes `@yt-ddp/core`.
-- `apps/extension`: A Manifest V3 Chrome & Firefox extension (React, Vite, Shadcn UI).
-- `apps/web`: A Next.js 15 App Router landing page.
+| Package | Description |
+| :--- | :--- |
+| **`packages/core`** | Framework-agnostic deduplication logic and shared types. |
+| **`apps/cli`** | The headless NPM package that consumes `@yt-ddp/core`. |
+| **`apps/extension`** | Manifest V3 Chrome & Firefox extension (Vite, React, Framer Motion, Glassmorphic Brutalist UI). |
+| **`apps/web`** | A Next.js 15 App Router landing page. |
 
 Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed instructions on how to set up the development environment, run tests, and contribute.
 

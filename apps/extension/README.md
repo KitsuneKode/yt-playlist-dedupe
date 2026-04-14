@@ -1,73 +1,61 @@
-# React + TypeScript + Vite
+# 🧩 YT Dedupe Extension
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+<div align="center">
+  <p>The native, DOM-bypassing browser extension for scanning and nuking duplicate videos from massive YouTube playlists.</p>
+</div>
 
-Currently, two official plugins are available:
+<br />
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ✦ Overview
 
-## React Compiler
+The YT Dedupe Extension provides a premium, zero-config GUI for the YT Dedupe engine. By reading the actual rendered DOM of the YouTube playlist page, it entirely bypasses Google's YouTube Data API, ensuring you never hit quotas, deal with limit-bans, or need to configure OAuth credentials.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Aesthetic Design
+The UI utilizes a bespoke **Glassmorphic Obsidian** dark mode complete with:
+- `motion/react` spring physics and staggered choreographed lists
+- Blur-masked borders and refined interactive press states
+- Custom cubic-bezier easings for snappy, production-grade micro-interactions
 
-## Expanding the ESLint configuration
+<br />
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 🛠 Developer Setup
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+This extension is built with **Vite**, **React**, **Tailwind CSS**, and **Framer Motion**.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Recommended Commands
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+First, ensure you are in the root directory and have installed dependencies via `bun install`. 
+
+Then, to develop on the extension specifically:
+
+```bash
+# Run local dev server with Hot Module Replacement (HMR)
+bun run dev --filter extension
+
+# Build the extension for Chrome (Outputs to /dist/chrome)
+bun run build --filter extension
+
+# Build the extension for Firefox (Outputs to /dist/firefox)
+bun run build:firefox --filter extension
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Loading the Extension into Chrome
+1. Run the build command above.
+2. Go to `chrome://extensions` in your browser.
+3. Enable **Developer mode** (top right).
+4. Click **Load unpacked** and select the `/apps/extension/dist/chrome` directory.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Loading into Firefox
+1. Run the Firefox build command.
+2. Go to `about:debugging#/runtime/this-firefox`.
+3. Click **Load Temporary Add-on...**
+4. Select the `manifest.json` file inside the `/apps/extension/dist/firefox` folder.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+<br />
+
+## 🏗 Tech Stack
+- **React 19**
+- **Vite (CRXJS Plugin)**
+- **Tailwind CSS v4**
+- **Framer Motion v12**
+- **Lucide React** (Icons)
