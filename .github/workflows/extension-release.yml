@@ -1,0 +1,83 @@
+name: Extension Release
+
+on:
+  push:
+    tags:
+      - "extension-v*"
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Create as draft release"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extension-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & Release Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate tag version matches manifest
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#extension-v}"
+          MANIFEST_VERSION=$(grep -oP 'version:\s*"\K[^"]+' apps/extension/manifest.config.ts)
+          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match manifest version ($MANIFEST_VERSION)"
+            exit 1
+          fi
+          echo "Version validated: $TAG_VERSION"
+
+      - name: Quality gate
+        run: bun run check --filter extension
+
+      - name: Build extension
+        run: bun run build --filter extension
+
+      - name: Verify build artifacts
+        run: |
+          for zip in yt-dedupe-chrome.zip yt-dedupe-firefox.zip; do
+            if [ ! -f "apps/extension/dist/$zip" ]; then
+              echo "::error::Expected build artifact apps/extension/dist/$zip not found"
+              exit 1
+            fi
+          done
+          echo "All build artifacts verified"
+
+      - name: Generate SHA256 checksums
+        working-directory: apps/extension/dist
+        run: sha256sum yt-dedupe-chrome.zip yt-dedupe-firefox.zip > checksums-sha256.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
+          name: Extension ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            apps/extension/dist/yt-dedupe-chrome.zip
+            apps/extension/dist/yt-dedupe-firefox.zip
+            apps/extension/dist/checksums-sha256.txt
