@@ -1,4 +1,5 @@
 {
+<<<<<<< changeset-release/main
   "name": "@kitsunekode/yt-ddp",
   "version": "0.2.1",
   "description": "CLI for safely finding and removing duplicate videos from a YouTube playlist.",
@@ -8,63 +9,36 @@
     "npm",
     "playlist",
     "youtube"
+=======
+  "name": "yt-playlist-dedupe-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+>>>>>>> main
   ],
-  "homepage": "https://github.com/KitsuneKode/yt-playlist-dedupe#readme",
-  "bugs": {
-    "url": "https://github.com/KitsuneKode/yt-playlist-dedupe/issues"
-  },
-  "license": "MIT",
-  "author": "KitsuneKode",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/KitsuneKode/yt-playlist-dedupe.git"
-  },
-  "bin": {
-    "yt-ddp": "dist/index.js"
-  },
-  "files": [
-    "dist",
-    "completions",
-    "docs",
-    "CHANGELOG.md",
-    "README.md",
-    "LICENSE"
-  ],
-  "type": "module",
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
-    "start": "bun run index.ts",
-    "setup": "bun run index.ts setup",
-    "changeset": "bunx changeset",
-    "changeset:status": "bunx changeset status --verbose",
-    "version-packages": "bunx changeset version",
-    "clean": "bun --eval 'await Bun.$`rm -rf dist`'",
-    "build": "bun run clean && bun build index.ts --target=node --packages=external --outfile=dist/index.js && bun --eval 'await Bun.$`chmod 755 dist/index.js`'",
-    "lint": "bunx biome lint .",
-    "format": "bunx biome format . --write",
-    "check:biome": "bunx biome check .",
-    "fix": "bunx biome check . --write",
-    "typecheck": "bunx tsc --noEmit",
-    "test": "bun test",
-    "check": "bun run check:biome && bun run typecheck && bun run test",
-    "ci:validate": "bun run publish:check",
-    "smoke:built": "bun dist/index.js --help",
-    "pack:dry-run": "bun pm pack --dry-run",
-    "link:global": "bun run build && bun link",
-    "unlink:global": "bun unlink",
-    "publish:check": "bun run check && bun run build && bun run smoke:built && bun run pack:dry-run",
-    "release": "bun run publish:check && bun publish --access public",
-    "prepublishOnly": "bun run publish:check"
-  },
-  "dependencies": {
-    "googleapis": "^171.4.0"
+    "dev": "turbo run dev --ui=tui",
+    "dev:firefox": "turbo run dev:firefox --ui=tui",
+    "build": "turbo run build --ui=tui",
+    "clean": "bun run scripts/clean.ts",
+    "test": "turbo run test --ui=tui",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "typecheck": "turbo run typecheck",
+    "format": "oxfmt .",
+    "check": "turbo run check --ui=tui",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.10",
-    "@changesets/cli": "^2.30.0",
-    "@types/bun": "latest",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "@types/bun": "1.3.12",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "oxfmt": "^0.45.0",
+    "oxlint": "^1.60.0",
+    "turbo": "^2.9.6",
     "typescript": "latest"
   },
   "engines": {

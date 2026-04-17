@@ -5,6 +5,7 @@ node_modules
 out
 dist
 *.tgz
+test-results
 
 # code coverage
 coverage
@@ -37,6 +38,8 @@ oauth-token.json
 .eslintcache
 .cache
 *.tsbuildinfo
+.turbo
+.next
 
 # IntelliJ based IDEs
 .idea

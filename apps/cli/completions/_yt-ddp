@@ -1,0 +1,41 @@
+#compdef yt-ddp
+
+local context state line
+typeset -A opt_args
+
+_yt_ddp_commands=(
+  'scan:scan a playlist for duplicates'
+  'setup:save OAuth client credentials to local app config'
+  'login:alias for setup'
+  'quota:show local cache state and estimated quota usage'
+  'completion:print a shell completion script'
+  'help:show help'
+)
+
+_arguments -C \
+  '--playlist[Playlist ID or full YouTube playlist/watch URL]:playlist input:' \
+  '--dry-run[Scan only and print duplicates]' \
+  '--refresh[Ignore cached dry-run results and fetch live data]' \
+  '--execute[Delete duplicate playlist items]' \
+  '--yes[Skip delete confirmation; requires --execute]' \
+  '--json[Print machine-readable output]' \
+  '--help[Show help text]' \
+  '-h[Show help text]' \
+  '1:command or playlist:->first' \
+  '*::args:->rest'
+
+case $state in
+  first)
+    _describe 'commands' _yt_ddp_commands
+    ;;
+  rest)
+    case $words[2] in
+      completion)
+        _values 'shell' zsh
+        ;;
+      scan)
+        _message 'playlist id or YouTube playlist URL'
+        ;;
+    esac
+    ;;
+esac

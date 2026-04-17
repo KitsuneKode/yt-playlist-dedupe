@@ -1,0 +1,105 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+@import "@fontsource-variable/geist";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --animate-fade-in-up: fade-in-up 0.5s var(--ease-out) forwards;
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@layer base {
+  :root {
+    --background: oklch(0.05 0 0);
+    --foreground: oklch(0.985 0 0);
+    --border: oklch(1 0 0 / 8%);
+    --primary: oklch(0.65 0.25 290);
+    --primary-foreground: oklch(1 0 0);
+    --card: oklch(0.08 0 0 / 60%);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.08 0 0 / 60%);
+    --popover-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.12 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.12 0 0);
+    --muted-foreground: oklch(0.65 0 0);
+    --accent: oklch(0.65 0.25 290);
+    --accent-foreground: oklch(1 0 0);
+    --destructive: oklch(0.6 0.25 25);
+    --input: oklch(1 0 0 / 10%);
+    --ring: oklch(0.65 0.25 290 / 50%);
+    --radius: 1rem;
+    
+    /* Emil Design Eng Easings */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  
+  *::-webkit-scrollbar {
+    display: none;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    width: 400px;
+    height: 600px;
+    overflow: hidden;
+    background-image: 
+      radial-gradient(circle at 50% 0%, oklch(0.65 0.25 290 / 15%) 0%, transparent 70%),
+      radial-gradient(circle at 100% 100%, oklch(0.6 0.25 25 / 10%) 0%, transparent 50%);
+  }
+
+  .glass-panel {
+    @apply bg-card backdrop-blur-2xl border border-white/5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)];
+  }
+
+  .glass-input {
+    @apply bg-white/5 border border-white/10 backdrop-blur-md focus:bg-white/10 transition-colors;
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 20px oklch(0.65 0.25 290 / 40%);
+  }
+}
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
