@@ -1,21 +1,9 @@
 {
-<<<<<<< changeset-release/main
-  "name": "@kitsunekode/yt-ddp",
-  "version": "0.2.1",
-  "description": "CLI for safely finding and removing duplicate videos from a YouTube playlist.",
-  "keywords": [
-    "cli",
-    "dedupe",
-    "npm",
-    "playlist",
-    "youtube"
-=======
   "name": "yt-playlist-dedupe-monorepo",
   "private": true,
   "workspaces": [
     "apps/*",
     "packages/*"
->>>>>>> main
   ],
   "scripts": {
     "dev": "turbo run dev --ui=tui",
