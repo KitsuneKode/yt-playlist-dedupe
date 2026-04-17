@@ -7,17 +7,41 @@
 
 ---
 
+## ⬇️ Download the Extension
+
+[![Latest Release](https://img.shields.io/github/v/release/KitsuneKode/yt-playlist-dedupe?filter=extension-v*&label=latest&logo=github)](https://github.com/KitsuneKode/yt-playlist-dedupe/releases/latest)
+
+| Browser                              | Download                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Chrome / Chromium (Edge, Brave, Arc) | [yt-dedupe-chrome.zip](https://github.com/KitsuneKode/yt-playlist-dedupe/releases/latest/download/yt-dedupe-chrome.zip)   |
+| Mozilla Firefox                      | [yt-dedupe-firefox.zip](https://github.com/KitsuneKode/yt-playlist-dedupe/releases/latest/download/yt-dedupe-firefox.zip) |
+
+### Install Chrome Extension (2 steps)
+
+1. Download `yt-dedupe-chrome.zip` and unzip it anywhere on your computer.
+2. Go to `chrome://extensions` → enable **Developer mode** → click **Load unpacked** → select the unzipped folder.
+
+### Install Firefox Extension (2 steps)
+
+1. Download `yt-dedupe-firefox.zip` and unzip it anywhere.
+2. Go to `about:debugging#/runtime/this-firefox` → click **Load Temporary Add-on...** → select `manifest.json` inside the unzipped folder.
+
+---
+
 <br />
 
 ## ✦ Features
 
 ### 🧩 DOM Extractor (Browser Extension)
+
 Reads rendered videos directly from the DOM. Requires **zero OAuth setup** and consumes **zero API units**. Bypasses the YouTube Data API limits completely by acting as a native web client.
 
 ### ⚡ Quota Safe-Stop (CLI)
+
 YouTube aggressively caps deletions at ~198/day per account. Our CLI tracks a local ledger and intercepts execution before you hit `403 Forbidden` HTTP errors, keeping your API project safe from shadowbans.
 
 ### 🧠 Smart Caching (CLI)
+
 Playlist metadata is automatically cached locally for 24 hours. The cache is programmed to magically invalidate at Midnight PT exactly when Google's quota resets.
 
 <br />
@@ -39,22 +63,27 @@ bunx @kitsunekode/yt-ddp --help
 ### Usage
 
 **1. Setup OAuth Credentials**
+
 ```bash
 yt-ddp setup
 ```
+
 > Follow the interactive terminal prompts to configure your Google Cloud project and inject your OAuth credentials.
 
 **2. Dry-Run Scan**
+
 ```bash
 yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID"
 ```
 
 **3. Execute Deletions**
+
 ```bash
 yt-ddp "https://www.youtube.com/playlist?list=PLAYLIST_ID" --execute
 ```
 
 **4. Check Local Quota Ledger**
+
 ```bash
 yt-ddp quota
 ```
@@ -68,6 +97,7 @@ Built for end-users. Nuke duplicates directly from your browser without limits, 
 ### Installation (Local Development / Unpacked)
 
 #### For Google Chrome / Chromium Browsers (Edge, Brave, Arc):
+
 1. Clone this repository and run `bun run build` at the root.
 2. Open Chrome and navigate to `chrome://extensions`.
 3. Toggle on **Developer mode** in the top right corner.
@@ -75,12 +105,14 @@ Built for end-users. Nuke duplicates directly from your browser without limits, 
 5. Select the `apps/extension/dist/chrome` folder.
 
 #### For Mozilla Firefox:
+
 1. Clone this repository and run `bun run build` at the root.
 2. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`.
 3. Click on **Load Temporary Add-on...**.
 4. Navigate to `apps/extension/dist/firefox` and select the `manifest.json` file.
 
 ### Usage
+
 1. Navigate to a YouTube playlist (e.g., `https://www.youtube.com/playlist?list=...`).
 2. Click the **YT Dedupe** extension icon.
 3. Click **Deep Auto Scan** to let the extension scroll and read the entire stack.
@@ -92,12 +124,12 @@ Built for end-users. Nuke duplicates directly from your browser without limits, 
 
 This project is structured as a high-performance **Turborepo** monorepo using **Bun**.
 
-| Package | Description |
-| :--- | :--- |
-| **`packages/core`** | Framework-agnostic deduplication logic and shared types. |
-| **`apps/cli`** | The headless NPM package that consumes `@yt-ddp/core`. |
+| Package              | Description                                                                                     |
+| :------------------- | :---------------------------------------------------------------------------------------------- |
+| **`packages/core`**  | Framework-agnostic deduplication logic and shared types.                                        |
+| **`apps/cli`**       | The headless NPM package that consumes `@yt-ddp/core`.                                          |
 | **`apps/extension`** | Manifest V3 Chrome & Firefox extension (Vite, React, Framer Motion, Glassmorphic Brutalist UI). |
-| **`apps/web`** | A Next.js 15 App Router landing page. |
+| **`apps/web`**       | A Next.js 15 App Router landing page.                                                           |
 
 Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed instructions on how to set up the development environment, run tests, and contribute.
 

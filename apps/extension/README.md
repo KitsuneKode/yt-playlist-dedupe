@@ -18,6 +18,12 @@ The UI utilizes a bespoke **Glassmorphic Obsidian** dark mode complete with:
 
 <br />
 
+## ⬇️ Download Pre-Built Extension
+
+Don't want to build from source? Grab the latest pre-built zip from [GitHub Releases](https://github.com/KitsuneKode/yt-playlist-dedupe/releases/latest) — see the root [README](../../README.md#️-download-the-extension) for download links and install instructions.
+
+<br />
+
 ## 🛠 Developer Setup
 
 This extension is built with **Vite**, **React**, **Tailwind CSS**, and **Framer Motion**.
