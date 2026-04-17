@@ -1,6 +1,5 @@
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
 export const alt = "YT Dedupe - Nuke YouTube Playlist Duplicates Instantly";
 export const size = {
   width: 1200,
