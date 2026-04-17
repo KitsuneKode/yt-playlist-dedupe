@@ -19,7 +19,7 @@ for (const target of targets) {
   const targetDir = path.join(distDir, target);
   if (!fs.existsSync(targetDir)) {
     console.error(`Target directory ${targetDir} not found. Run build:${target} first.`);
-    continue;
+    process.exit(1);
   }
 
   const zip = new AdmZip();
