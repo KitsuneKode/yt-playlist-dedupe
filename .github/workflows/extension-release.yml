@@ -6,6 +6,10 @@ on:
       - "extension-v*"
   workflow_dispatch:
     inputs:
+      version:
+        description: "Extension version to release. Defaults to manifest.config.ts version."
+        required: false
+        type: string
       draft:
         description: "Create as draft release"
         required: false
@@ -19,6 +23,9 @@ concurrency:
   group: extension-release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release:
     name: Build & Release Extension
@@ -26,14 +33,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -41,21 +48,36 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Validate tag version matches manifest
+      - name: Resolve release version
+        id: version
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#extension-v}"
-          MANIFEST_VERSION=$(grep -oP 'version:\s*"\K[^"]+' apps/extension/manifest.config.ts)
-          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
-            echo "::error::Tag version ($TAG_VERSION) does not match manifest version ($MANIFEST_VERSION)"
+          MANIFEST_VERSION=$(sed -nE 's/^[[:space:]]*version:[[:space:]]*"([^"]+)".*/\1/p' apps/extension/manifest.config.ts | head -n 1)
+          if [ -z "$MANIFEST_VERSION" ]; then
+            echo "::error::Could not read extension version from apps/extension/manifest.config.ts"
             exit 1
           fi
-          echo "Version validated: $TAG_VERSION"
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            RELEASE_VERSION="${GITHUB_REF_NAME#extension-v}"
+          else
+            RELEASE_VERSION="${{ github.event.inputs.version || '' }}"
+            RELEASE_VERSION="${RELEASE_VERSION:-$MANIFEST_VERSION}"
+          fi
+
+          if [ "$RELEASE_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Release version ($RELEASE_VERSION) does not match manifest version ($MANIFEST_VERSION)"
+            exit 1
+          fi
+
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=extension-v$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version validated: $RELEASE_VERSION"
 
       - name: Quality gate
-        run: bun run check --filter extension
+        run: bun run --filter extension check
 
       - name: Build extension
-        run: bun run build --filter extension
+        run: bun run --filter extension build
 
       - name: Verify build artifacts
         run: |
@@ -72,10 +94,12 @@ jobs:
         run: sha256sum yt-dedupe-chrome.zip yt-dedupe-firefox.zip > checksums-sha256.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
-          name: Extension ${{ github.ref_name }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Extension ${{ steps.version.outputs.tag }}
           generate_release_notes: true
           files: |
             apps/extension/dist/yt-dedupe-chrome.zip

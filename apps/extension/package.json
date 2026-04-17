@@ -12,7 +12,8 @@
     "lint": "oxlint src",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "playwright test"
+    "test": "playwright test",
+    "check": "bun run lint && bun run typecheck && bun run test"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

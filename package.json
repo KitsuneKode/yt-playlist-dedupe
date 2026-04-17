@@ -16,9 +16,12 @@
     "typecheck": "turbo run typecheck",
     "format": "oxfmt .",
     "check": "turbo run check --ui=tui",
+    "version-packages": "changeset version",
+    "release": "bun run --filter '@kitsunekode/yt-ddp' release",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.30.0",
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@types/bun": "1.3.12",
