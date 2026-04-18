@@ -9,6 +9,7 @@ export default defineManifest((_env) => {
     short_name: "YT Dedupe",
     description:
       "Instantly scan and remove duplicate videos from your YouTube playlists natively in your browser.",
+    homepage_url: "https://yt-ddp.kitsunelabs.xyz",
     version: "1.0.0",
     action: {
       default_popup: "src/popup/index.html",

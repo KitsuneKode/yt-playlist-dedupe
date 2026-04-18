@@ -9,6 +9,7 @@
 
 ## ⬇️ Download the Extension
 
+[![Website](https://img.shields.io/badge/website-yt--ddp.kitsunelabs.xyz-0f172a?logo=googlechrome&logoColor=white)](https://yt-ddp.kitsunelabs.xyz)
 [![Latest Release](https://img.shields.io/github/v/release/KitsuneKode/yt-playlist-dedupe?filter=extension-v*&label=latest&logo=github)](https://github.com/KitsuneKode/yt-playlist-dedupe/releases/latest)
 
 | Browser                              | Download                                                                                                                  |
