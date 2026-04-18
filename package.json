@@ -1,5 +1,5 @@
 {
-  "name": "yt-playlist-dedupe-monorepo",
+  "name": "yt-ddp",
   "private": true,
   "workspaces": [
     "apps/*",
