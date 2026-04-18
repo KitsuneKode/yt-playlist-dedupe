@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import {
   Terminal,
   Chrome,
@@ -15,6 +15,7 @@ import {
   Gauge,
   Copy,
   Check,
+  Star,
 } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -28,6 +29,44 @@ const GithubIcon = () => (
     <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.082.824-.26.824-.578 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
   </svg>
 );
+
+function GithubButton({ className = "" }: { className?: string }) {
+  const [stars, setStars] = useState<number | null>(null);
+
+  const fetchStars = useCallback(async () => {
+    try {
+      const res = await fetch("https://api.github.com/repos/KitsuneKode/yt-playlist-dedupe");
+      if (res.ok) {
+        const data = await res.json();
+        setStars(data.stargazers_count);
+      }
+    } catch {
+      // silently fail - button still works without star count
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStars();
+  }, [fetchStars]);
+
+  return (
+    <Link
+      href="https://github.com/KitsuneKode/yt-playlist-dedupe"
+      target="_blank"
+      rel="noreferrer"
+      className={`flex items-center gap-2 hover:bg-brutal-fg hover:text-brutal-bg border-thick px-5 py-2.5 transition-all font-mono text-xs font-black uppercase ${className}`}
+    >
+      <GithubIcon />
+      <span>Repository</span>
+      {stars !== null && (
+        <span className="flex items-center gap-1 ml-1 pl-2 border-l border-current/30">
+          <Star className="w-3 h-3" />
+          {stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : stars}
+        </span>
+      )}
+    </Link>
+  );
+}
 
 function BrowserExtensionButton() {
   const [browserInfo, setBrowserInfo] = useState({
@@ -211,15 +250,7 @@ export default function Home() {
 
         <div className="flex items-center gap-6">
           <div className="nav-item hidden md:block">
-            <Link
-              href="https://github.com/KitsuneKode/yt-playlist-dedupe"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 hover:bg-brutal-fg hover:text-brutal-bg border-thick px-5 py-2.5 transition-all font-mono text-xs font-black uppercase"
-            >
-              <GithubIcon />
-              <span>Repository</span>
-            </Link>
+            <GithubButton />
           </div>
           <div className="nav-item">
             <Link
