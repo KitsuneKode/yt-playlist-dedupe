@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+.turbo
+test-results
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

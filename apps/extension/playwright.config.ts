@@ -8,5 +8,12 @@ export default defineConfig({
   },
   use: {
     trace: "on-first-retry",
+    headless: true,
+  },
+  webServer: {
+    command: "bun run dev",
+    url: "http://localhost:5173",
+    reuseExistingServer: !process.env.CI,
+    timeout: 120 * 1000,
   },
 });

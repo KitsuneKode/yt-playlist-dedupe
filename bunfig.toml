@@ -1,0 +1,4 @@
+[test]
+preload = [""]
+root = "."
+pathIgnorePatterns = ["**/node_modules/**", "**/dist/**", "**/e2e/**"]

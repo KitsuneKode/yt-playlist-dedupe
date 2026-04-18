@@ -73,6 +73,9 @@ jobs:
           echo "tag=extension-v$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "Version validated: $RELEASE_VERSION"
 
+      - name: Install Playwright Browsers
+        run: bunx playwright install --with-deps
+
       - name: Quality gate
         run: bun run --filter extension check
 

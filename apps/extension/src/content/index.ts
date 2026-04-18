@@ -1,16 +1,34 @@
 // YouTube Playlist Deduplicator - Native Content Script
 
-console.log("[YT-DDP] Content script loaded and active.");
+import type { DuplicateItem, Speed } from "@/types";
 
 let isExecuting = false;
 let stopExecution = false;
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log("[YT-DDP] Message received:", request.action);
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.action === "CHECK_PERMISSIONS") {
+    if (!window.location.href.includes("youtube.com/playlist")) {
+      sendResponse({ canEdit: false, reason: "Not on a playlist page" });
+      return;
+    }
+
+    if (!checkLoginStatus()) {
+      sendResponse({ canEdit: false, reason: "You must be logged into YouTube to use this tool." });
+      return;
+    }
+
+    const ownershipCheck = checkPlaylistOwnership();
+    sendResponse(ownershipCheck);
+    return true;
+  }
 
   if (request.action === "SCAN_DOM") {
     if (!window.location.href.includes("youtube.com/playlist")) {
-      sendResponse({ duplicates: [], totalScanned: 0, error: "Not on a playlist page" });
+      sendResponse({
+        duplicates: [],
+        totalScanned: 0,
+        error: "Not on a playlist page",
+      });
       return;
     }
 
@@ -48,12 +66,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return;
     }
 
+    if (!checkLoginStatus()) {
+      sendResponse({ ok: false, error: "You must be logged into YouTube to use this tool." });
+      return;
+    }
+
+    const ownershipCheck = checkPlaylistOwnership();
+    if (!ownershipCheck.canEdit) {
+      sendResponse({ ok: false, error: ownershipCheck.reason });
+      return;
+    }
+
     isExecuting = true;
     stopExecution = false;
 
     executeDeletions(request.items, request.options || { speed: "normal" })
       .then(() => {
-        console.log("[YT-DDP] Deletion process finished.");
         isExecuting = false;
         sendResponse({ ok: true });
       })
@@ -65,6 +93,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 });
+
+function checkLoginStatus(): boolean {
+  // Check for YouTube's generic "Sign in" button in the top bar
+  const signInButton = document.querySelector(
+    'a[href*="ServiceLogin"], ytd-button-renderer a[href*="ServiceLogin"]',
+  );
+  if (signInButton) {
+    return false;
+  }
+  return true; // Assuming logged in if no explicit sign-in link is found
+}
 
 async function scrollToBottom() {
   let lastCount = 0;
@@ -114,13 +153,57 @@ async function scrollToBottom() {
   return lastCount;
 }
 
+function checkPlaylistOwnership(): { canEdit: boolean; reason?: string } {
+  const urlParams = new URLSearchParams(window.location.search);
+  const playlistId = urlParams.get("list");
+
+  if (playlistId) {
+    const prefix = playlistId.slice(0, 2).toUpperCase();
+    const protectedPlaylists: Record<string, string> = {
+      HL: "Watch History",
+      LL: "Liked Videos",
+      WL: "Watch Later",
+      UU: "Uploads",
+      FL: "Favorites",
+    };
+
+    if (protectedPlaylists[prefix]) {
+      return {
+        canEdit: false,
+        reason: `Cannot edit ${protectedPlaylists[prefix]} - it is a protected YouTube playlist.`,
+      };
+    }
+  }
+
+  // Strict ownership check based on UI elements only visible to owners
+  const editButton = document.querySelector(
+    "#edit-button, ytd-button-renderer#edit-button, [aria-label*='Edit playlist'], ytd-menu-renderer yt-button-shape",
+  );
+
+  const dragHandles = document.querySelector("ytd-playlist-video-renderer #reorder");
+
+  const privacyDropdown = document.querySelector(
+    "ytd-playlist-header-renderer ytd-dropdown-button-renderer",
+  );
+
+  if (editButton || dragHandles || privacyDropdown) {
+    return { canEdit: true };
+  }
+
+  return {
+    canEdit: false,
+    reason:
+      "You don't have permission to edit this playlist. Only the playlist owner can manage videos.",
+  };
+}
+
 function scanForDuplicates() {
   const items = Array.from(
     document.querySelectorAll("ytd-playlist-video-renderer, ytd-playlist-panel-video-renderer"),
   );
 
   const seenVideos = new Map<string, { index: number; title: string }>();
-  const duplicates: any[] = [];
+  const duplicates: DuplicateItem[] = [];
 
   items.forEach((item, index) => {
     const anchor = item.querySelector(
@@ -182,7 +265,7 @@ async function waitForElementByText(
   return null;
 }
 
-async function executeDeletions(items: any[], options: { speed: string }) {
+async function executeDeletions(items: DuplicateItem[], options: { speed: Speed }) {
   let deletedCount = 0;
   const speedConfigs = {
     fast: { min: 200, max: 400, menuWait: 200 },
@@ -262,14 +345,14 @@ async function executeDeletions(items: any[], options: { speed: string }) {
       // Human-like delay
       const delay = speedDelays.min + Math.random() * (speedDelays.max - speedDelays.min);
       await new Promise((r) => setTimeout(r, delay));
-    } catch (error: any) {
+    } catch (error) {
       console.error("[YT-DDP] Error during deletion:", error);
       chrome.runtime.sendMessage({
         action: "DELETE_PROGRESS",
         count: deletedCount,
         currentTitle: dup.title,
         status: "failed",
-        error: error.message,
+        error: error instanceof Error ? error.message : "Unknown error",
       });
 
       // Close menu on error
@@ -278,5 +361,8 @@ async function executeDeletions(items: any[], options: { speed: string }) {
     }
   }
 
-  chrome.runtime.sendMessage({ action: "DELETE_COMPLETE", total: deletedCount });
+  chrome.runtime.sendMessage({
+    action: "DELETE_COMPLETE",
+    total: deletedCount,
+  });
 }

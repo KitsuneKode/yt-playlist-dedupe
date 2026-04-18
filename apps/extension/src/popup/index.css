@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/jetbrains-mono";
 
 @theme inline {
   --color-background: var(--background);
@@ -26,70 +27,121 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: "Geist Variable", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
   --animate-fade-in-up: fade-in-up 0.5s var(--ease-out) forwards;
   --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-pulse-glow: pulse-glow 2.5s ease-in-out infinite;
 }
 
 @layer base {
   :root {
-    --background: oklch(0.05 0 0);
-    --foreground: oklch(0.985 0 0);
-    --border: oklch(1 0 0 / 8%);
-    --primary: oklch(0.65 0.25 290);
-    --primary-foreground: oklch(1 0 0);
-    --card: oklch(0.08 0 0 / 60%);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.08 0 0 / 60%);
-    --popover-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.12 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.12 0 0);
-    --muted-foreground: oklch(0.65 0 0);
-    --accent: oklch(0.65 0.25 290);
-    --accent-foreground: oklch(1 0 0);
-    --destructive: oklch(0.6 0.25 25);
-    --input: oklch(1 0 0 / 10%);
-    --ring: oklch(0.65 0.25 290 / 50%);
-    --radius: 1rem;
+    /* Premium Ethereal Obsidian Palette */
+    --background: oklch(0.12 0.01 270);
+    --foreground: oklch(0.98 0 0);
+    --border: oklch(0.20 0.01 270);
     
-    /* Emil Design Eng Easings */
-    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    /* Ethereal Cyan Accent */
+    --primary: oklch(0.82 0.14 195);
+    --primary-foreground: oklch(0.12 0.01 270);
+    
+    --card: oklch(0.15 0.01 270 / 0.6);
+    --card-foreground: oklch(0.98 0 0);
+    --popover: oklch(0.15 0.01 270 / 0.8);
+    --popover-foreground: oklch(0.98 0 0);
+    
+    --secondary: oklch(0.18 0.01 270 / 0.7);
+    --secondary-foreground: oklch(0.98 0 0);
+    
+    --muted: oklch(0.18 0.01 270 / 0.5);
+    --muted-foreground: oklch(0.65 0.01 270);
+    
+    --accent: oklch(0.82 0.14 195 / 0.15);
+    --accent-foreground: oklch(0.82 0.14 195);
+    
+    --destructive: oklch(0.60 0.25 20);
+    --input: oklch(0.18 0.01 270);
+    --ring: oklch(0.82 0.14 195 / 0.5);
+    --radius: 0.75rem;
+
+    /* Extremely smooth spring-like easings */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   * {
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
-  
+
   *::-webkit-scrollbar {
     display: none;
   }
-  
+
   body {
     @apply bg-background text-foreground antialiased;
     width: 400px;
     height: 600px;
     overflow: hidden;
-    background-image: 
-      radial-gradient(circle at 50% 0%, oklch(0.65 0.25 290 / 15%) 0%, transparent 70%),
-      radial-gradient(circle at 100% 100%, oklch(0.6 0.25 25 / 10%) 0%, transparent 50%);
+    background-color: var(--background);
+    background-image: radial-gradient(
+      circle at 50% -20%, 
+      oklch(0.82 0.14 195 / 0.1) 0%, 
+      transparent 70%
+    );
   }
 
-  .glass-panel {
-    @apply bg-card backdrop-blur-2xl border border-white/5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)];
+  /* Ethereal Glass Panel */
+  .ethereal-glass {
+    @apply bg-card border border-white/[0.08] backdrop-blur-2xl;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: translateZ(0);
+    will-change: transform;
   }
 
-  .glass-input {
-    @apply bg-white/5 border border-white/10 backdrop-blur-md focus:bg-white/10 transition-colors;
+  /* Secondary Glass (Inputs, lists) */
+  .ethereal-input {
+    @apply bg-secondary border border-white/[0.05] backdrop-blur-md;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.25s var(--ease-out);
+  }
+
+  .ethereal-input:focus {
+    @apply border-primary/50;
+    box-shadow:
+      inset 0 2px 4px rgba(0, 0, 0, 0.2),
+      0 0 0 3px rgba(var(--color-primary), 0.2);
   }
 }
 
 @layer utilities {
-  .text-glow {
-    text-shadow: 0 0 20px oklch(0.65 0.25 290 / 40%);
+  .text-ethereal-glow {
+    text-shadow: 0 0 20px var(--color-primary), 0 0 40px var(--color-primary);
+  }
+
+  .svg-ethereal-glow {
+    filter: drop-shadow(0 0 10px var(--color-primary)) drop-shadow(0 0 20px var(--color-primary));
+  }
+
+  .mono-number {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Skeleton loading animation class */
+  .skeleton-wave {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.03) 25%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.03) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
   }
 }
 
@@ -102,4 +154,14 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 10px rgba(255,255,255,0.1)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 25px var(--color-primary)); }
 }
