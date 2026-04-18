@@ -1,0 +1,14 @@
+{
+  "lineWidth": 100,
+  "indentStyle": "space",
+  "indentWidth": 2,
+  "endOfLine": "lf",
+  "javascript": {
+    "quoteStyle": "double",
+    "quoteProperties": "asNeeded",
+    "trailingCommas": "all",
+    "semicolons": "always",
+    "arrowParentheses": "always"
+  },
+  "ignorePatterns": ["node_modules", "dist", ".next", "coverage", "bun.lock"]
+}

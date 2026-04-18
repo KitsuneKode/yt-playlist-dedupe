@@ -1,15 +1,17 @@
 @import "tailwindcss";
 
-
 @theme {
   --font-display: "Clash Display", Impact, Haettenschweiler, "Arial Black", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  
-  --color-brutal-bg: #F0F0EE;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --color-brutal-bg: #f0f0ee;
   --color-brutal-fg: #111111;
-  --color-brutal-accent: #FF3300;
-  --color-brutal-accent2: #00E676;
+  --color-brutal-accent: #ff3300;
+  --color-brutal-accent2: #00e676;
 }
 
 @layer base {
@@ -50,7 +52,7 @@
   .brutal-shadow-accent {
     box-shadow: 8px 8px 0px 0px var(--color-brutal-accent);
   }
-  
+
   .border-b-thick {
     border-bottom: 4px solid var(--color-brutal-fg);
   }

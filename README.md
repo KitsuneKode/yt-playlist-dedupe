@@ -129,7 +129,7 @@ This project is structured as a high-performance **Turborepo** monorepo using **
 | **`packages/core`**  | Framework-agnostic deduplication logic and shared types.                                        |
 | **`apps/cli`**       | The headless NPM package that consumes `@yt-ddp/core`.                                          |
 | **`apps/extension`** | Manifest V3 Chrome & Firefox extension (Vite, React, Framer Motion, Glassmorphic Brutalist UI). |
-| **`apps/web`**       | A Next.js 15 App Router landing page.                                                           |
+| **`apps/web`**       | A Next.js 16 App Router landing page.                                                           |
 
 Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed instructions on how to set up the development environment, run tests, and contribute.
 

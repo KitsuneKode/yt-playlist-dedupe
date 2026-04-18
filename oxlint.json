@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/crates/oxc_linter/generated_schema.json",
+  "rules": {
+    "no-unused-vars": "error",
+    "no-console": "warn",
+    "eqeqeq": "error",
+    "prefer-const": "error"
+  },
+  "overrides": [
+    {
+      "files": ["*.test.*", "*.spec.*", "e2e/**"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["node_modules", "dist", ".next", "coverage", "bun.lock"]
+}

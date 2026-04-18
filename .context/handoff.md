@@ -1,7 +1,7 @@
 ---
 updated: 2026-04-14T00:00:00Z
 branch: main
-session_name: 'Monorepo Restructure, Extension Upgrade & Next.js Website'
+session_name: "Monorepo Restructure, Extension Upgrade & Next.js Website"
 context_pressure: high
 ---
 
@@ -11,7 +11,7 @@ context_pressure: high
 - Extracted shared logic into `packages/core`.
 - Restructured the CLI into `apps/cli`.
 - Rebuilt `apps/extension` with React, Vite, Shadcn UI, and full Chrome + Firefox MV3 cross-compatibility.
-- Created `apps/web` with Next.js 15 App Router, GSAP animations, Brutalist aesthetic, and full SEO/JSON-LD optimization.
+- Created `apps/web` with Next.js 16 App Router, GSAP animations, Brutalist aesthetic, and full SEO/JSON-LD optimization.
 - Swapped Biome out for Oxc (`oxlint` and `oxfmt`) for extreme performance.
 - Configured Husky, lint-staged, and Commitlint.
 - Configured Playwright for E2E testing the extension.
@@ -20,7 +20,7 @@ context_pressure: high
 
 ## In Progress
 
-- Project is currently stable and passing all checks (`bun run check`). 
+- Project is currently stable and passing all checks (`bun run check`).
 
 ## Blocked
 

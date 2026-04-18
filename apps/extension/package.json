@@ -12,6 +12,7 @@
     "lint": "oxlint src",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
+    "format": "oxfmt src",
     "test": "playwright test",
     "check": "bun run lint && bun run typecheck && bun run test"
   },

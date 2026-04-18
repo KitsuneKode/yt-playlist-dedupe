@@ -21,12 +21,12 @@ Set up a fully automated GitHub Releases pipeline for the YT Dedupe browser exte
 
 ## Decisions
 
-| Question | Decision |
-|---|---|
-| Release trigger | Independent `extension-v*` git tags — decoupled from CLI/npm Changesets cycle |
+| Question           | Decision                                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Release trigger    | Independent `extension-v*` git tags — decoupled from CLI/npm Changesets cycle                                              |
 | Changelog strategy | GitHub's `--generate-notes` reads merged PRs since last `extension-v*` tag; `.github/release.yml` categorizes PRs by label |
-| README audience | Mixed — prominent download section for end users near top, developer section preserved below |
-| Action versions | Use latest stable pinned versions across all workflows |
+| README audience    | Mixed — prominent download section for end users near top, developer section preserved below                               |
+| Action versions    | Use latest stable pinned versions across all workflows                                                                     |
 
 ---
 
@@ -37,6 +37,7 @@ Set up a fully automated GitHub Releases pipeline for the YT Dedupe browser exte
 **Trigger:** `push` on tags matching `extension-v*`
 
 **Steps:**
+
 1. `actions/checkout@v4` with `fetch-depth: 0` (needed for `--generate-notes` to find the previous tag)
 2. `oven-sh/setup-bun@v2`
 3. `bun install --frozen-lockfile`
@@ -52,6 +53,7 @@ Set up a fully automated GitHub Releases pipeline for the YT Dedupe browser exte
 ### 2. `.github/workflows/release.yml` (modified)
 
 Remove the two broken steps at the end:
+
 - `Upload Extension Artifacts` (guarded by `steps.changesets.outputs.published == 'true'`)
 - `Attach Zips to GitHub Release`
 
@@ -89,16 +91,18 @@ Labels not matching any category appear under a default "Other Changes" section.
 
 [Latest Release badge linking to github.com/.../releases/latest]
 
-| Browser | Download |
-|---|---|
-| Chrome / Chromium (Edge, Brave, Arc) | [yt-dedupe-chrome.zip] |
-| Mozilla Firefox | [yt-dedupe-firefox.zip] |
+| Browser                              | Download                |
+| ------------------------------------ | ----------------------- |
+| Chrome / Chromium (Edge, Brave, Arc) | [yt-dedupe-chrome.zip]  |
+| Mozilla Firefox                      | [yt-dedupe-firefox.zip] |
 
 ### Install Chrome Extension (2 steps)
+
 1. Download `yt-dedupe-chrome.zip` and unzip it anywhere on your computer.
 2. Go to `chrome://extensions` → enable **Developer mode** → click **Load unpacked** → select the unzipped folder.
 
 ### Install Firefox Extension (2 steps)
+
 1. Download `yt-dedupe-firefox.zip` and unzip it anywhere.
 2. Go to `about:debugging#/runtime/this-firefox` → click **Load Temporary Add-on...** → select `manifest.json` inside the unzipped folder.
 ```
@@ -148,10 +152,10 @@ git push --tags
 
 ## Files Changed
 
-| File | Action |
-|---|---|
-| `.github/workflows/extension-release.yml` | Create |
-| `.github/workflows/release.yml` | Remove broken extension upload steps |
-| `.github/release.yml` | Create |
-| `README.md` | Add download section near top |
-| `apps/extension/README.md` | Add pre-built download note |
+| File                                      | Action                               |
+| ----------------------------------------- | ------------------------------------ |
+| `.github/workflows/extension-release.yml` | Create                               |
+| `.github/workflows/release.yml`           | Remove broken extension upload steps |
+| `.github/release.yml`                     | Create                               |
+| `README.md`                               | Add download section near top        |
+| `apps/extension/README.md`                | Add pre-built download note          |

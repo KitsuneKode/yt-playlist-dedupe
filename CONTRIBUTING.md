@@ -1,6 +1,6 @@
 # Contributing to YT Dedupe
 
-First off, thank you for considering contributing to YT Dedupe! 
+First off, thank you for considering contributing to YT Dedupe!
 
 This document provides guidelines and instructions for setting up your development environment, navigating the monorepo architecture, and submitting your contributions.
 
@@ -16,17 +16,19 @@ This project is structured as a **Turborepo** monorepo:
 - `packages/core`: Contains the core deduplication algorithms and shared TypeScript interfaces. Framework agnostic.
 - `apps/cli`: The Node.js command-line interface. Consumes `@yt-ddp/core`.
 - `apps/extension`: The browser extension (Manifest V3) for Chrome and Firefox. Built with React, Vite, and Shadcn UI. Consumes `@yt-ddp/core`.
-- `apps/web`: The marketing landing page. Built with Next.js 15 and Tailwind CSS.
+- `apps/web`: The marketing landing page. Built with Next.js 16 and Tailwind CSS.
 
 ## Getting Started
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/KitsuneKode/yt-playlist-dedupe.git
    cd yt-playlist-dedupe
    ```
 
 2. **Install dependencies:**
+
    ```bash
    bun install
    ```
@@ -62,6 +64,7 @@ We employ strict, high-performance tooling to maintain code quality:
 ## Developing the CLI (`apps/cli`)
 
 To test CLI changes locally:
+
 1. Navigate to `apps/cli`.
 2. Run `bun run build`.
 3. Link it globally: `bun link`.
@@ -69,7 +72,7 @@ To test CLI changes locally:
 
 ## Developing the Extension (`apps/extension`)
 
-The extension uses React, Tailwind CSS, and Shadcn UI. 
+The extension uses React, Tailwind CSS, and Shadcn UI.
 
 1. **Running Dev:** `bun run dev` (from root) or `cd apps/extension && bun run dev`.
 2. **Adding UI Components:** We use Shadcn UI. If you need a new component, use the CLI:
