@@ -1,6 +1,6 @@
 {
   "name": "@kitsunekode/yt-ddp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI for safely finding and removing duplicate videos from a YouTube playlist.",
   "keywords": [
     "cli",
